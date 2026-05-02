@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-teal: #0F7173;
+    --brand-teal-dark: #0A5455;
+    --brand-teal-light: #E8F4F4;
+    --brand-gold: #C9A84C;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+           text-gray-600 hover:bg-brand-teal-light hover:text-brand-teal
+           transition-colors duration-150;
+  }
+
+  .sidebar-link.active {
+    @apply bg-brand-teal-light text-brand-teal;
+  }
+}
