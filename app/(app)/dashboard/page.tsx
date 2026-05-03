@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
-import { AlertCircle, Briefcase, CalendarDays, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { AlertCircle, Briefcase, CalendarDays, Sparkles, Building2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
@@ -38,9 +40,39 @@ const WIDGETS = [
   },
 ]
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  let hasOrg = true
+  if (user) {
+    const { data } = await supabase
+      .from('org_members')
+      .select('id')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'invited'])
+      .limit(1)
+    hasOrg = Array.isArray(data) && data.length > 0
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* No-org banner */}
+      {!hasOrg && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-center gap-3">
+          <Building2 className="w-5 h-5 text-amber-500 shrink-0" />
+          <p className="text-sm text-amber-800 flex-1">
+            Your account isn&apos;t linked to an organisation yet.
+          </p>
+          <Link
+            href="/onboarding"
+            className="text-sm font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900 whitespace-nowrap"
+          >
+            Set up organisation →
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
