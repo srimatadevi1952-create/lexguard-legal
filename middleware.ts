@@ -41,47 +41,71 @@ export async function middleware(request: NextRequest) {
   }
 
   // For both org-gated routes AND /onboarding we need the membership count.
-  // We use the session client (not the admin client) — the RLS policy
-  // `user_id = auth.uid()` covers self-reads without a service-role key.
+  // NOTE: We intentionally use the SESSION client (anon key + JWT from cookies)
+  //       so the RLS self-read policy `user_id = auth.uid()` applies.
+  //       If the JWT is expired/missing the query returns [] and the user is
+  //       wrongly redirected — that is the bug we are diagnosing here.
   if (user && (isOrgGated || pathname.startsWith('/onboarding'))) {
-    console.log(`[MW] org check for user=${user.id} path=${pathname}`)
+    console.log(`[MW:ORG_CHECK] START user.id=${user.id} path=${pathname}`)
+
+    // Read the raw access-token from the cookie so we can confirm it exists.
+    const accessTokenCookie = request.cookies.get('sb-access-token')
+      ?? request.cookies.get(
+        // @supabase/ssr stores the token under a project-prefixed key like
+        // sb-<project-ref>-auth-token; grab whichever key holds "access_token"
+        [...request.cookies.getAll()]
+          .find(c => c.value.includes('"access_token"'))
+          ?.name ?? ''
+      )
+    console.log(
+      `[MW:ORG_CHECK] access_token_cookie_present=${!!accessTokenCookie?.value} ` +
+      `name=${accessTokenCookie?.name ?? 'NOT_FOUND'}`
+    )
 
     const { data, error } = await supabase
       .from('org_members')
-      .select('id')
+      .select('id, user_id, org_id, role, status')
       .eq('user_id', user.id)
       .in('status', ['active', 'invited'])
-      .limit(1)
+      .limit(5)
 
-    console.log(`[MW] org_members: data=${JSON.stringify(data)} | error=${error?.message ?? 'null'}`)
+    console.log(
+      `[MW:ORG_CHECK] query=org_members.user_id=${user.id} ` +
+      `result_rows=${data?.length ?? 'null'} ` +
+      `data=${JSON.stringify(data)} ` +
+      `error_code=${error?.code ?? 'null'} ` +
+      `error_msg=${error?.message ?? 'null'} ` +
+      `error_hint=${(error as { hint?: string } | null)?.hint ?? 'null'}`
+    )
 
     if (error) {
       // Transient DB error — do NOT block the user; let the layout
       // run its own defence-in-depth check before deciding.
-      console.error('[MW] org check DB error (passing through):', error.code, error.message)
+      console.error('[MW:ORG_CHECK] DB error (passing through):', error.code, error.message)
+      console.log('[MW:ORG_CHECK] DECISION=pass_through_on_error')
     } else if (pathname.startsWith('/onboarding')) {
       // ── Authenticated user on /onboarding ──────────────────────────────────
       if (data && data.length > 0) {
-        // Already has an org → skip onboarding
-        console.log('[MW] → user on /onboarding but already has org → REDIRECT /dashboard')
+        console.log(`[MW:ORG_CHECK] DECISION=redirect_dashboard (has_org=true, on_onboarding)`)
         const url = request.nextUrl.clone()
         url.pathname = '/dashboard'
         const redirectResponse = NextResponse.redirect(url)
         copySessionCookies(supabaseResponse, redirectResponse)
         return redirectResponse
       }
+      console.log(`[MW:ORG_CHECK] DECISION=allow_onboarding (has_org=false)`)
       // No org yet → fall through to /onboarding (allow)
     } else if (isOrgGated) {
       // ── Org-gated route ─────────────────────────────────────────────────────
       if (!data || data.length === 0) {
-        console.log('[MW] → 0 org rows → REDIRECT /onboarding')
+        console.log(`[MW:ORG_CHECK] DECISION=redirect_onboarding (has_org=false, on_gated_route)`)
         const url = request.nextUrl.clone()
         url.pathname = '/onboarding'
         const redirectResponse = NextResponse.redirect(url)
         copySessionCookies(supabaseResponse, redirectResponse)
         return redirectResponse
       }
-      console.log(`[MW] → ${data.length} org row(s) → PASS THROUGH`)
+      console.log(`[MW:ORG_CHECK] DECISION=pass_through (has_org=true, rows=${data.length})`)
     }
   }
 
