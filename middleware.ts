@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
-import { createAdminClient } from '@/lib/supabase/admin'
 
-const PUBLIC_PATHS = ['/login', '/auth', '/onboarding']
+const PUBLIC_PATHS = ['/login', '/auth']
 
 const ORG_GATED_PREFIXES = [
   '/dashboard',
@@ -17,29 +16,23 @@ const ORG_GATED_PREFIXES = [
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
-
-  // ── [DIAG 1] every request ──────────────────────────────────────────────
   console.log(`[MW] ▶ ${request.method} ${pathname}`)
 
-  const { supabaseResponse, user } = await updateSession(request)
-
-  // ── [DIAG 2] auth result ─────────────────────────────────────────────────
+  const { supabaseResponse, user, supabase } = await updateSession(request)
   console.log(`[MW] user=${user ? user.id : 'null'} | pathname=${pathname}`)
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
   const isOrgGated   = ORG_GATED_PREFIXES.some((p) => pathname.startsWith(p))
 
-  console.log(`[MW] isPublicPath=${isPublicPath} | isOrgGated=${isOrgGated}`)
-
-  // Redirect unauthenticated users away from protected routes.
-  if (!user && !isPublicPath) {
+  // ── Unauthenticated users → /login ─────────────────────────────────────────
+  if (!user && !isPublicPath && !pathname.startsWith('/onboarding')) {
     console.log('[MW] → no user, not public → REDIRECT /login')
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from login.
+  // ── Authenticated user on /login → /dashboard ──────────────────────────────
   if (user && pathname === '/login') {
     console.log('[MW] → user on /login → REDIRECT /dashboard')
     const url = request.nextUrl.clone()
@@ -47,78 +40,65 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Org-membership guard.
-  if (user && isOrgGated) {
-    console.log(`[MW] org check start for user=${user.id}`)
+  // For both org-gated routes AND /onboarding we need the membership count.
+  // We use the session client (not the admin client) — the RLS policy
+  // `user_id = auth.uid()` covers self-reads without a service-role key.
+  if (user && (isOrgGated || pathname.startsWith('/onboarding'))) {
+    console.log(`[MW] org check for user=${user.id} path=${pathname}`)
 
-    try {
-      const admin = createAdminClient()
+    const { data, error } = await supabase
+      .from('org_members')
+      .select('id')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'invited'])
+      .limit(1)
 
-      // ── [DIAG 3] check env vars ──────────────────────────────────────────
-      console.log(`[MW] SUPABASE_URL set=${!!process.env.NEXT_PUBLIC_SUPABASE_URL}`)
-      console.log(`[MW] SERVICE_KEY set=${!!process.env.SUPABASE_SERVICE_ROLE_KEY}`)
+    console.log(`[MW] org_members: data=${JSON.stringify(data)} | error=${error?.message ?? 'null'}`)
 
-      const { data, error } = await admin
-        .from('org_members')
-        .select('id')
-        .eq('user_id', user.id)
-        .in('status', ['active', 'invited'])
-        .limit(1)
-
-      // ── [DIAG 4] query result ────────────────────────────────────────────
-      console.log(`[MW] org_members query: data=${JSON.stringify(data)} | error=${error ? error.message : 'null'}`)
-
-      if (error) {
-        console.error('[MW] org_members query ERROR:', error.code, error.message, error.details)
+    if (error) {
+      // Transient DB error — do NOT block the user; let the layout
+      // run its own defence-in-depth check before deciding.
+      console.error('[MW] org check DB error (passing through):', error.code, error.message)
+    } else if (pathname.startsWith('/onboarding')) {
+      // ── Authenticated user on /onboarding ──────────────────────────────────
+      if (data && data.length > 0) {
+        // Already has an org → skip onboarding
+        console.log('[MW] → user on /onboarding but already has org → REDIRECT /dashboard')
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard'
+        const redirectResponse = NextResponse.redirect(url)
+        copySessionCookies(supabaseResponse, redirectResponse)
+        return redirectResponse
       }
-
-      const rowCount = Array.isArray(data) ? data.length : -1
-      console.log(`[MW] rowCount=${rowCount}`)
-
+      // No org yet → fall through to /onboarding (allow)
+    } else if (isOrgGated) {
+      // ── Org-gated route ─────────────────────────────────────────────────────
       if (!data || data.length === 0) {
         console.log('[MW] → 0 org rows → REDIRECT /onboarding')
-
         const url = request.nextUrl.clone()
         url.pathname = '/onboarding'
         const redirectResponse = NextResponse.redirect(url)
-
-        // Copy refreshed session cookies so the browser keeps a valid session
-        // at /onboarding (prevents an auth loop back to /dashboard).
-        supabaseResponse.cookies.getAll().forEach((cookie) => {
-          redirectResponse.cookies.set(cookie.name, cookie.value, {
-            httpOnly: cookie.httpOnly,
-            sameSite: cookie.sameSite as 'lax' | 'strict' | 'none' | undefined,
-            secure: cookie.secure,
-            path: cookie.path,
-            maxAge: cookie.maxAge,
-          })
-        })
-        console.log(`[MW] redirect response cookies: ${redirectResponse.cookies.getAll().map(c => c.name).join(', ')}`)
+        copySessionCookies(supabaseResponse, redirectResponse)
         return redirectResponse
       }
-
-      console.log(`[MW] → ${rowCount} org row(s) found → PASS THROUGH`)
-    } catch (err) {
-      console.error('[MW] org check THREW:', err)
-      // On any unexpected error, block entry and send to onboarding.
-      const url = request.nextUrl.clone()
-      url.pathname = '/onboarding'
-      const redirectResponse = NextResponse.redirect(url)
-      supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, {
-          httpOnly: cookie.httpOnly,
-          sameSite: cookie.sameSite as 'lax' | 'strict' | 'none' | undefined,
-          secure: cookie.secure,
-          path: cookie.path,
-          maxAge: cookie.maxAge,
-        })
-      })
-      return redirectResponse
+      console.log(`[MW] → ${data.length} org row(s) → PASS THROUGH`)
     }
   }
 
   console.log('[MW] → returning supabaseResponse (pass through)')
   return supabaseResponse
+}
+
+function copySessionCookies(source: NextResponse, target: NextResponse) {
+  source.cookies.getAll().forEach((cookie) => {
+    target.cookies.set(cookie.name, cookie.value, {
+      httpOnly: cookie.httpOnly,
+      sameSite: cookie.sameSite as 'lax' | 'strict' | 'none' | undefined,
+      secure: cookie.secure,
+      path: cookie.path,
+      maxAge: cookie.maxAge,
+    })
+  })
 }
 
 export const config = {

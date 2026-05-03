@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -67,6 +67,30 @@ type OnboardingFormData = z.infer<typeof schema>
 export default function OnboardingPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [checking, setChecking] = useState(true)
+
+  // Idempotency: if the user already has an org, skip onboarding
+  useEffect(() => {
+    async function checkExistingOrg() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setChecking(false); return }
+
+      const { data } = await supabase
+        .from('org_members')
+        .select('id')
+        .eq('user_id', user.id)
+        .in('status', ['active', 'invited'])
+        .limit(1)
+
+      if (data && data.length > 0) {
+        router.replace('/dashboard')
+      } else {
+        setChecking(false)
+      }
+    }
+    checkExistingOrg()
+  }, [router])
 
   const {
     register,
@@ -110,6 +134,14 @@ export default function OnboardingPage() {
     toast.success('Organisation created — welcome to LexGuard Legal!')
     router.push('/dashboard')
     router.refresh()
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-brand-teal-light flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-brand-teal border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
