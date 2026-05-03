@@ -103,6 +103,80 @@ schema after each migration batch.
 
 ---
 
+## Contract Intelligence (Phase 1)
+
+### Migration
+`supabase/migrations/20260503000008_contracts.sql` — 8 tables, 5 enums, storage bucket, RLS.
+
+### Tables
+| Table | Purpose |
+|---|---|
+| `contracts` | One row per contract; holds metadata, risk_score, risk_level |
+| `contract_versions` | One row per uploaded file; holds file_path + extracted_text |
+| `contract_clauses` | Extracted clause hierarchy with char_start/char_end positions |
+| `contract_flags` | Risk flags with severity, category, suggested_fix, flag_references |
+| `contract_summaries` | EN + HI short/long summaries + key_terms JSONB |
+| `contract_chat_messages` | Per-contract AI chat history |
+| `contract_tags` | Org-scoped coloured tags |
+| `contract_tag_assignments` | M2M contracts ↔ tags |
+
+### Storage bucket
+`contracts` (private, 50 MB max). Path pattern: `org_{org_id}/contracts/{contract_id}/v{n}.{ext}`.
+RLS restricts access to matching `user_session_state.active_org_id`.
+
+### Analysis pipeline (`lib/contracts/analysis.ts`)
+```typescript
+// Orchestrator — call from the API route
+await runAnalysisPipeline(contractId)
+// Steps: download → extractTextFromBuffer → extractClauses (Prompt A) →
+//        analyseRisk (Prompt B) → generateEnglishSummary (Prompt C) →
+//        translateToHindi (Prompt D) → persist → update contract
+```
+Risk score formula: `min(100, critical×20 + high×10 + medium×4 + low×1)`
+
+### Claude wrapper (`lib/claude.ts`)
+```typescript
+import { callClaude, parseJsonResponse } from '@/lib/claude'
+const text = await callClaude({ model: 'claude-opus-4-6', system: '...', prompt: '...' })
+const data = parseJsonResponse<MyType>(text)  // handles raw JSON or ```json ... ``` blocks
+```
+
+### API Routes
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/contracts/analyse` | POST | Runs full analysis pipeline for a contract_id |
+| `/api/contracts/chat` | POST | AI Q&A about a specific contract; persists messages |
+
+Request body for `/analyse`: `{ contract_id: string }`
+Request body for `/chat`: `{ contract_id: string, message: string }`
+
+### Three-pane layout (`components/contracts/contract-detail.tsx`)
+```tsx
+// Server page fetches all data; passes to client component
+<ContractDetail contract={...} clauses={...} flags={...} summary={...}
+                chatMessages={...} auditLog={...} userId={...} />
+// Left pane: clause outline tree with flag severity dots
+// Centre pane: full text with inline colour-coded highlights (clause-level)
+// Right pane: tabs → Flags | Summary | Chat | History | Compliance
+```
+- Tab preference persisted to `localStorage[lastTab_{contractId}]`
+- Click clause in left pane → scrolls centre pane via `clauseRefs`
+- Click highlighted clause in centre → opens flag in right pane
+- "Insert fix" → copies to clipboard + marks flag resolved + logs audit event
+- Hindi toggle is a button inside the Summary tab (not a separate page)
+
+### Bilingual summary toggle pattern
+```tsx
+// summaryLang state: 'en' | 'hi'
+const text = summaryLang === 'en' ? summary.summary_en_short : summary.summary_hi_short
+// One-tap toggle button with EN / हिं labels
+```
+
+### Seed data
+`supabase/seed_contracts.sql` — 5 demo contracts (MSA, NDA, SaaS, Employment, Lease)
+with pre-populated clauses, flags, and summaries for `admin@democorp.com`.
+Run after migrations AND after the demo user completes onboarding.
+
 ## API Routes
 
 <!-- app/api/* route handlers, request/response shapes added here -->
