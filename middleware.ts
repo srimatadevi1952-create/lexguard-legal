@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const PUBLIC_PATHS = ['/login', '/auth']
 
@@ -41,37 +42,53 @@ export async function middleware(request: NextRequest) {
   }
 
   // For both org-gated routes AND /onboarding we need the membership count.
-  // NOTE: We intentionally use the SESSION client (anon key + JWT from cookies)
-  //       so the RLS self-read policy `user_id = auth.uid()` applies.
-  //       If the JWT is expired/missing the query returns [] and the user is
-  //       wrongly redirected — that is the bug we are diagnosing here.
+  // We use the SERVICE-ROLE admin client (bypasses RLS entirely) because the
+  // session-client JWT is unreliable in the Edge Runtime — the access token
+  // may not survive the cookie → PostgREST Authorization header hop, causing
+  // auth.uid() to resolve to null inside RLS policies and returning 0 rows.
   if (user && (isOrgGated || pathname.startsWith('/onboarding'))) {
     console.log(`[MW:ORG_CHECK] START user.id=${user.id} path=${pathname}`)
 
-    // Read the raw access-token from the cookie so we can confirm it exists.
-    const accessTokenCookie = request.cookies.get('sb-access-token')
-      ?? request.cookies.get(
-        // @supabase/ssr stores the token under a project-prefixed key like
-        // sb-<project-ref>-auth-token; grab whichever key holds "access_token"
-        [...request.cookies.getAll()]
-          .find(c => c.value.includes('"access_token"'))
-          ?.name ?? ''
-      )
+    // ── Verify service-role key is present and log its format ──────────────
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    const keyFormat = !serviceKey
+      ? 'MISSING'
+      : serviceKey.startsWith('sb_secret_')
+        ? 'new_sb_secret'
+        : serviceKey.startsWith('eyJ')
+          ? 'legacy_jwt'
+          : 'unknown'
     console.log(
-      `[MW:ORG_CHECK] access_token_cookie_present=${!!accessTokenCookie?.value} ` +
-      `name=${accessTokenCookie?.name ?? 'NOT_FOUND'}`
+      `[MW:ORG_CHECK] service_key_present=${!!serviceKey} format=${keyFormat} ` +
+      `len=${serviceKey.length}`
     )
 
-    const { data, error } = await supabase
+    // ── Build the query client ─────────────────────────────────────────────
+    // Prefer admin client; fall back to session client if key is absent so
+    // the middleware degrades gracefully rather than throwing.
+    let queryClient: ReturnType<typeof createAdminClient> | typeof supabase
+    let clientType: 'admin' | 'session'
+    try {
+      queryClient  = createAdminClient()
+      clientType   = 'admin'
+    } catch (e) {
+      console.warn('[MW:ORG_CHECK] admin client unavailable, falling back to session client:', e)
+      queryClient = supabase
+      clientType  = 'session'
+    }
+    console.log(`[MW:ORG_CHECK] client_type=${clientType}`)
+
+    // ── Run the membership query ───────────────────────────────────────────
+    const { data, error, count } = await queryClient
       .from('org_members')
-      .select('id, user_id, org_id, role, status')
+      .select('id, user_id, org_id, role, status', { count: 'exact' })
       .eq('user_id', user.id)
       .in('status', ['active', 'invited'])
       .limit(5)
 
     console.log(
-      `[MW:ORG_CHECK] query=org_members.user_id=${user.id} ` +
-      `result_rows=${data?.length ?? 'null'} ` +
+      `[MW:ORG_CHECK] result rows=${data?.length ?? 'null'} ` +
+      `count=${count ?? 'null'} ` +
       `data=${JSON.stringify(data)} ` +
       `error_code=${error?.code ?? 'null'} ` +
       `error_msg=${error?.message ?? 'null'} ` +
@@ -94,7 +111,6 @@ export async function middleware(request: NextRequest) {
         return redirectResponse
       }
       console.log(`[MW:ORG_CHECK] DECISION=allow_onboarding (has_org=false)`)
-      // No org yet → fall through to /onboarding (allow)
     } else if (isOrgGated) {
       // ── Org-gated route ─────────────────────────────────────────────────────
       if (!data || data.length === 0) {
@@ -105,7 +121,7 @@ export async function middleware(request: NextRequest) {
         copySessionCookies(supabaseResponse, redirectResponse)
         return redirectResponse
       }
-      console.log(`[MW:ORG_CHECK] DECISION=pass_through (has_org=true, rows=${data.length})`)
+      console.log(`[MW:ORG_CHECK] DECISION=pass_through (has_org=true rows=${data.length})`)
     }
   }
 
