@@ -27,17 +27,19 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 }
 
 export const STATUS_LABELS: Record<ContractExecutionStatus, string> = {
-  draft:        'Draft',
-  under_review: 'Under Review',
-  executed:     'Executed',
-  archived:     'Archived',
+  draft:           'Draft',
+  under_review:    'Under Review',
+  executed:        'Executed',
+  archived:        'Archived',
+  analysis_failed: 'Analysis Failed',
 }
 
 const STATUS_COLORS: Record<ContractExecutionStatus, string> = {
-  draft:        'bg-gray-100 text-gray-600',
-  under_review: 'bg-blue-50 text-blue-700',
-  executed:     'bg-green-50 text-green-700',
-  archived:     'bg-gray-100 text-gray-400',
+  draft:           'bg-gray-100 text-gray-600',
+  under_review:    'bg-blue-50 text-blue-700',
+  executed:        'bg-green-50 text-green-700',
+  archived:        'bg-gray-100 text-gray-400',
+  analysis_failed: 'bg-red-50 text-red-600',
 }
 
 const RISK_COLORS: Record<RiskLevel, string> = {

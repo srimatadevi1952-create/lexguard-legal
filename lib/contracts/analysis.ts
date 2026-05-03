@@ -9,7 +9,7 @@
  *               claude-sonnet-4-6 for summary + Hindi translation.
  */
 
-import { callClaude, parseJsonResponse } from '@/lib/claude'
+import { callClaudeWithJsonRetry } from '@/lib/claude'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type {
   FlagSeverity,
@@ -116,14 +116,12 @@ Rules:
 CONTRACT TEXT:
 ${contractText}`
 
-  const raw = await callClaude({
+  return callClaudeWithJsonRetry<ClauseRaw[]>({
     model: 'claude-opus-4-6',
     system: 'You are an expert Indian contract lawyer. Output ONLY valid JSON arrays.',
     prompt,
     maxTokens: 8192,
   })
-
-  return parseJsonResponse<ClauseRaw[]>(raw)
 }
 
 // ── Risk analysis (Prompt B) ──────────────────────────────────────────────────
@@ -159,14 +157,12 @@ ${contractText.slice(0, 12000)}
 EXTRACTED CLAUSE SUMMARY:
 ${clauseSummary.slice(0, 4000)}`
 
-  const raw = await callClaude({
+  return callClaudeWithJsonRetry<FlagRaw[]>({
     model: 'claude-opus-4-6',
     system: 'You are an expert Indian contract lawyer specialising in contract risk analysis. Output ONLY valid JSON arrays.',
     prompt,
     maxTokens: 8192,
   })
-
-  return parseJsonResponse<FlagRaw[]>(raw)
 }
 
 // ── English summary (Prompt C) ────────────────────────────────────────────────
@@ -190,14 +186,12 @@ Required fields:
 CONTRACT TEXT:
 ${contractText.slice(0, 12000)}`
 
-  const raw = await callClaude({
+  return callClaudeWithJsonRetry<SummaryRaw>({
     model: 'claude-sonnet-4-6',
     system: 'You are a legal analyst. Output ONLY valid JSON objects.',
     prompt,
     maxTokens: 4096,
   })
-
-  return parseJsonResponse<SummaryRaw>(raw)
 }
 
 // ── Hindi translation (Prompt D) ──────────────────────────────────────────────
@@ -217,14 +211,12 @@ ${englishSummary.summary_short}
 ENGLISH LONG SUMMARY:
 ${englishSummary.summary_long}`
 
-  const raw = await callClaude({
+  return callClaudeWithJsonRetry<TranslationRaw>({
     model: 'claude-sonnet-4-6',
     system: 'You are a professional Hindi legal translator. Maintain legal precision. Use Devanagari script. Output ONLY valid JSON.',
     prompt,
     maxTokens: 4096,
   })
-
-  return parseJsonResponse<TranslationRaw>(raw)
 }
 
 // ── Risk score computation ────────────────────────────────────────────────────
@@ -262,6 +254,29 @@ function findCharPositions(
 
 export async function runAnalysisPipeline(contractId: string): Promise<void> {
   const admin = createAdminClient()
+
+  try {
+    await _runPipeline(admin, contractId)
+  } catch (err) {
+    // Mark the contract so the UI can show a retry button
+    await admin
+      .from('contracts')
+      .update({ execution_status: 'analysis_failed' })
+      .eq('id', contractId)
+    throw err
+  }
+}
+
+async function _runPipeline(
+  admin: ReturnType<typeof createAdminClient>,
+  contractId: string,
+): Promise<void> {
+  // 0. Clear prior failed state so UI doesn't show stale "failed" badge while running
+  await admin
+    .from('contracts')
+    .update({ execution_status: 'draft' })
+    .eq('id', contractId)
+    .eq('execution_status', 'analysis_failed')
 
   // 1. Fetch contract + latest version
   const { data: contract, error: contractErr } = await admin

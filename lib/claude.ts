@@ -56,3 +56,26 @@ export function parseJsonResponse<T>(raw: string): T {
 
   throw new Error(`Failed to parse JSON from response: ${raw.slice(0, 300)}`)
 }
+
+/**
+ * Call Claude and parse the JSON response, with one automatic retry
+ * using a stricter system prompt if the first parse fails.
+ */
+export async function callClaudeWithJsonRetry<T>(params: {
+  model: ClaudeModel
+  system?: string
+  prompt: string
+  maxTokens?: number
+}): Promise<T> {
+  const raw = await callClaude(params)
+  try {
+    return parseJsonResponse<T>(raw)
+  } catch {
+    const strictSystem =
+      (params.system ? params.system + '\n' : '') +
+      'CRITICAL: Output ONLY raw JSON — no prose, no markdown fences, no explanation. ' +
+      'Your entire response must start with { or [ and contain nothing else.'
+    const raw2 = await callClaude({ ...params, system: strictSystem })
+    return parseJsonResponse<T>(raw2)
+  }
+}

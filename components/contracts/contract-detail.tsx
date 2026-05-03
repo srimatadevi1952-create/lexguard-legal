@@ -146,6 +146,7 @@ export function ContractDetail({
   const [chatMessages, setChatMessages] = useState(initialMessages)
   const [chatLoading, setChatLoading] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   const centerRef = useRef<HTMLDivElement>(null)
   const clauseRefs = useRef<Record<string, HTMLSpanElement>>({})
@@ -250,6 +251,27 @@ export function ContractDetail({
     }
   }, [chatInput, chatLoading, contract.id, userId])
 
+  // Retry analysis
+  async function handleRetryAnalysis() {
+    setRetrying(true)
+    setActionsOpen(false)
+    try {
+      const res = await fetch('/api/contracts/analyse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contract_id: contract.id }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Analysis failed')
+      toast.success('Analysis complete — reloading...')
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Analysis failed')
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   // ── Layout ────────────────────────────────────────────────────────────────
 
   const unresolvedFlags = flags.filter((f) => !f.is_resolved)
@@ -265,9 +287,14 @@ export function ContractDetail({
             {contract.risk_level.charAt(0).toUpperCase() + contract.risk_level.slice(1)} Risk
           </span>
         )}
-        {!contract.risk_level && (
+        {!contract.risk_level && contract.execution_status !== 'analysis_failed' && (
           <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
             Analysis pending
+          </span>
+        )}
+        {contract.execution_status === 'analysis_failed' && (
+          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">
+            Analysis failed
           </span>
         )}
 
@@ -300,7 +327,7 @@ export function ContractDetail({
                 <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
                 <div className="absolute right-0 top-8 z-20 w-40 bg-white rounded-lg shadow-lg border border-gray-100 py-1 text-xs">
                   <button onClick={() => { toast.info('Download coming soon'); setActionsOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 flex items-center gap-2"><Download className="w-3.5 h-3.5 text-gray-400" /> Download</button>
-                  <button onClick={() => { router.push('/contracts/upload'); setActionsOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 flex items-center gap-2"><RefreshCw className="w-3.5 h-3.5 text-gray-400" /> Reanalyse</button>
+                  <button onClick={handleRetryAnalysis} disabled={retrying} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 text-gray-400 ${retrying ? 'animate-spin' : ''}`} /> {retrying ? 'Analysing…' : 'Reanalyse'}</button>
                   <button onClick={() => { toast.info('Archive coming soon'); setActionsOpen(false) }} className="w-full text-left px-3 py-1.5 text-red-600 hover:bg-red-50 flex items-center gap-2"><Archive className="w-3.5 h-3.5" /> Archive</button>
                 </div>
               </>
@@ -308,6 +335,26 @@ export function ContractDetail({
           </div>
         </div>
       </div>
+
+      {/* ── Analysis failed banner ───────────────────────────────────────────── */}
+      {contract.execution_status === 'analysis_failed' && (
+        <div className="shrink-0 px-4 py-2.5 bg-red-50 border-b border-red-200 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+            <p className="text-xs text-red-700">
+              Analysis failed — Claude returned an unexpected response. You can retry or upload a cleaner version of the document.
+            </p>
+          </div>
+          <button
+            onClick={handleRetryAnalysis}
+            disabled={retrying}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${retrying ? 'animate-spin' : ''}`} />
+            {retrying ? 'Retrying…' : 'Retry analysis'}
+          </button>
+        </div>
+      )}
 
       {/* ── Three-pane area ──────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
