@@ -9,7 +9,7 @@
  *               claude-sonnet-4-6 for summary + Hindi translation.
  */
 
-import { callClaudeWithJsonRetry } from '@/lib/claude'
+import { callClaudeWithJsonRetry, safeContractText } from '@/lib/claude'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type {
   FlagSeverity,
@@ -98,6 +98,8 @@ export async function extractTextFromBuffer(
 // ── Clause extraction (Prompt A) ──────────────────────────────────────────────
 
 export async function extractClauses(contractText: string): Promise<ClauseRaw[]> {
+  const safeText = safeContractText(contractText, 'extractClauses')
+
   const prompt = `Extract the complete clause hierarchy from the following Indian-law contract.
 
 Return ONLY a JSON array. No other text, no markdown, no explanation.
@@ -114,13 +116,14 @@ Rules:
 - Do not truncate or paraphrase text
 
 CONTRACT TEXT:
-${contractText}`
+${safeText}`
 
   return callClaudeWithJsonRetry<ClauseRaw[]>({
     model: 'claude-opus-4-6',
     system: 'You are an expert Indian contract lawyer. Output ONLY valid JSON arrays.',
     prompt,
     maxTokens: 8192,
+    label: 'extractClauses',
   })
 }
 
@@ -162,6 +165,7 @@ ${clauseSummary.slice(0, 4000)}`
     system: 'You are an expert Indian contract lawyer specialising in contract risk analysis. Output ONLY valid JSON arrays.',
     prompt,
     maxTokens: 8192,
+    label: 'analyseRisk',
   })
 }
 
@@ -191,6 +195,7 @@ ${contractText.slice(0, 12000)}`
     system: 'You are a legal analyst. Output ONLY valid JSON objects.',
     prompt,
     maxTokens: 4096,
+    label: 'generateSummary',
   })
 }
 
@@ -216,6 +221,7 @@ ${englishSummary.summary_long}`
     system: 'You are a professional Hindi legal translator. Maintain legal precision. Use Devanagari script. Output ONLY valid JSON.',
     prompt,
     maxTokens: 4096,
+    label: 'translateHindi',
   })
 }
 
