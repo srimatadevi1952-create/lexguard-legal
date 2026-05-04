@@ -65,12 +65,12 @@ export async function extractTextFromBuffer(
   const type = fileType.toLowerCase()
 
   if (type === 'pdf' || type === 'application/pdf') {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse') as (
-      buf: Buffer
-    ) => Promise<{ text: string }>
-    const result = await pdfParse(buffer)
-    return result.text.trim()
+    // unpdf uses pdfjs-dist's pure-JS build — no DOM/canvas dependencies,
+    // works in Vercel Node.js serverless without DOMMatrix errors.
+    const { getDocumentProxy, extractText } = await import('unpdf')
+    const pdf = await getDocumentProxy(new Uint8Array(buffer))
+    const { text } = await extractText(pdf, { mergePages: true })
+    return text.trim()
   }
 
   if (
