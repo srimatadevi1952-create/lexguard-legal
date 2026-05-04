@@ -299,10 +299,15 @@ export async function runAnalysisPipeline(contractId: string): Promise<void> {
   try {
     await _runPipeline(admin, contractId)
   } catch (err) {
-    // Mark the contract so the UI can show a retry button
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    console.error(`[pipeline] FAILED contractId=${contractId}: ${errorMsg}`)
+    // Write the actual error so the UI (and developer) can see the root cause.
     await admin
       .from('contracts')
-      .update({ execution_status: 'analysis_failed' })
+      .update({
+        execution_status: 'analysis_failed',
+        analysis_error: errorMsg,
+      })
       .eq('id', contractId)
     throw err
   }
@@ -312,10 +317,10 @@ async function _runPipeline(
   admin: ReturnType<typeof createAdminClient>,
   contractId: string,
 ): Promise<void> {
-  // 0. Clear prior failed state so UI doesn't show stale "failed" badge while running
+  // 0. Clear prior failed state and error so UI doesn't show stale data while running
   await admin
     .from('contracts')
-    .update({ execution_status: 'draft' })
+    .update({ execution_status: 'draft', analysis_error: null })
     .eq('id', contractId)
     .eq('execution_status', 'analysis_failed')
 
@@ -337,13 +342,15 @@ async function _runPipeline(
   const version = versions.sort((a, b) => b.version_number - a.version_number)[0]
 
   // 2. Download file from storage
+  console.log(`[pipeline] downloading file_path="${version.file_path}" file_type="${version.file_type}"`)
   const { data: fileData, error: dlErr } = await admin.storage
     .from('contracts')
     .download(version.file_path)
 
   if (dlErr || !fileData) {
-    throw new Error(`Failed to download file: ${dlErr?.message}`)
+    throw new Error(`Storage download failed (path="${version.file_path}"): ${dlErr?.message}`)
   }
+  console.log(`[pipeline] download ok, size=${fileData.size}`)
 
   const buffer = Buffer.from(await fileData.arrayBuffer())
 

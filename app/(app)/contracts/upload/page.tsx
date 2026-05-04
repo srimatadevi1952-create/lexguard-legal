@@ -224,6 +224,7 @@ export default function UploadPage() {
             const payload = await statusRes.json() as {
               status: 'analysing' | 'completed' | 'failed'
               execution_status: string
+              analysis_error: string | null
             }
             console.log('[upload] poll tick', payload)
 
@@ -233,10 +234,13 @@ export default function UploadPage() {
               clearInterval(animInterval)
               resolve()
             } else if (payload.status === 'failed') {
-              console.error('[upload] poll: analysis_failed reported by server')
+              const errDetail = payload.analysis_error
+                ? `Error: ${payload.analysis_error}`
+                : 'No error detail available — check Vercel logs'
+              console.error('[upload] poll: analysis_failed —', errDetail)
               clearInterval(pollInterval)
               clearInterval(animInterval)
-              reject(new Error('Analysis failed — please try again or open the contract to retry'))
+              reject(new Error(errDetail))
             }
             // status === 'analysing' → keep polling
           } catch (pollErr) {

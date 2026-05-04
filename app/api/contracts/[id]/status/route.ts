@@ -13,7 +13,7 @@ export async function GET(
 
   const { data: contract, error } = await supabase
     .from('contracts')
-    .select('id, execution_status, risk_score, risk_level, analysis_completed_at')
+    .select('id, execution_status, risk_score, risk_level, analysis_completed_at, analysis_error')
     .eq('id', params.id)
     .single()
 
@@ -21,7 +21,6 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Derive a simple status the UI can act on
   let status: 'analysing' | 'completed' | 'failed'
   if (contract.execution_status === 'analysis_failed') {
     status = 'failed'
@@ -39,5 +38,7 @@ export async function GET(
     execution_status: contract.execution_status,
     risk_score: contract.risk_score,
     risk_level: contract.risk_level,
+    // Populated only when status === 'failed'; null otherwise.
+    analysis_error: contract.analysis_error ?? null,
   })
 }
