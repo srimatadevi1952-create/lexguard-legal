@@ -297,6 +297,7 @@ function findCharPositions(
 
 export async function runAnalysisPipeline(contractId: string): Promise<void> {
   const admin = createAdminClient()
+  console.log(`[pipeline] START contractId=${contractId} at ${new Date().toISOString()}`)
 
   try {
     await _runPipeline(admin, contractId)
@@ -319,6 +320,9 @@ async function _runPipeline(
   admin: ReturnType<typeof createAdminClient>,
   contractId: string,
 ): Promise<void> {
+  const t0 = Date.now()
+  const elapsed = () => `+${Date.now() - t0}ms`
+
   // 0. Clear prior failed state and error so UI doesn't show stale data while running
   await admin
     .from('contracts')
@@ -344,7 +348,7 @@ async function _runPipeline(
   const version = versions.sort((a, b) => b.version_number - a.version_number)[0]
 
   // 2. Download file from storage
-  console.log(`[pipeline] downloading file_path="${version.file_path}" file_type="${version.file_type}"`)
+  console.log(`[pipeline] ${elapsed()} downloading file_path="${version.file_path}" file_type="${version.file_type}"`)
   const { data: fileData, error: dlErr } = await admin.storage
     .from('contracts')
     .download(version.file_path)
@@ -352,12 +356,14 @@ async function _runPipeline(
   if (dlErr || !fileData) {
     throw new Error(`Storage download failed (path="${version.file_path}"): ${dlErr?.message}`)
   }
-  console.log(`[pipeline] download ok, size=${fileData.size}`)
+  console.log(`[pipeline] ${elapsed()} download ok size=${fileData.size}`)
 
   const buffer = Buffer.from(await fileData.arrayBuffer())
 
   // 3. Extract text
+  console.log(`[pipeline] ${elapsed()} extracting text`)
   const extractedText = await extractTextFromBuffer(buffer, version.file_type)
+  console.log(`[pipeline] ${elapsed()} text extracted chars=${extractedText.length}`)
 
   // 4. Save extracted text
   await admin
@@ -370,7 +376,7 @@ async function _runPipeline(
   const SMALL_DOC_THRESHOLD = 10_000
   let rawClauses: ClauseRaw[]
   if (extractedText.length < SMALL_DOC_THRESHOLD) {
-    console.log(`[pipeline] small doc (${extractedText.length} chars) — skipping clause extraction`)
+    console.log(`[pipeline] ${elapsed()} small doc — skipping clause extraction`)
     rawClauses = [{
       clause_number: '1',
       heading: 'Full Document',
@@ -378,7 +384,9 @@ async function _runPipeline(
       parent_index: null,
     }]
   } else {
+    console.log(`[pipeline] ${elapsed()} starting clause extraction`)
     rawClauses = await extractClauses(extractedText)
+    console.log(`[pipeline] ${elapsed()} clause extraction done clauses=${rawClauses.length}`)
   }
 
   // 6. Build clause parent map and save
@@ -411,7 +419,9 @@ async function _runPipeline(
   }
 
   // 7. Prompt B — risk analysis
+  console.log(`[pipeline] ${elapsed()} starting risk analysis`)
   const rawFlags = await analyseRisk(extractedText, rawClauses)
+  console.log(`[pipeline] ${elapsed()} risk analysis done flags=${rawFlags.length}`)
 
   // 8. Save flags (link to clause by clause_number)
   const clauseIdByNumber = new Map<string, string>()
@@ -438,7 +448,9 @@ async function _runPipeline(
   }
 
   // 9. Prompt C — English summary
+  console.log(`[pipeline] ${elapsed()} starting English summary`)
   const enSummary = await generateEnglishSummary(extractedText)
+  console.log(`[pipeline] ${elapsed()} English summary done`)
 
   // Hindi translation skipped on Hobby plan — saves 15-20s.
   // Re-enable by calling translateToHindi(enSummary) when on Pro plan.
@@ -464,4 +476,6 @@ async function _runPipeline(
       analysis_completed_at: new Date().toISOString(),
     })
     .eq('id', contractId)
+
+  console.log(`[pipeline] ${elapsed()} COMPLETE score=${score} level=${level}`)
 }

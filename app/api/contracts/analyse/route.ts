@@ -47,9 +47,13 @@ export async function POST(request: NextRequest) {
     // waitUntil() tells Vercel to keep this function alive until the promise
     // settles, even though we return the 202 response right away.
     // Without this, Vercel kills the function the moment the response is sent.
+    const pipelineStart = Date.now()
+    console.log(`[analyse] registering waitUntil for contractId=${contractId} at ${new Date().toISOString()}`)
+
     waitUntil(
       runAnalysisPipeline(contractId)
         .then(async () => {
+          console.log(`[analyse] pipeline DONE in ${Date.now() - pipelineStart}ms`)
           await logAudit(admin as Parameters<typeof logAudit>[0], {
             orgId: contract.org_id,
             entityType: 'contract',
@@ -60,12 +64,13 @@ export async function POST(request: NextRequest) {
         })
         .catch((err: unknown) => {
           console.error(
-            '[analyse] pipeline error:',
+            `[analyse] pipeline FAILED after ${Date.now() - pipelineStart}ms:`,
             err instanceof Error ? err.message : err
           )
         })
     )
 
+    console.log(`[analyse] returning 202 for contractId=${contractId}`)
     return NextResponse.json({ status: 'analysing', contract_id: contractId }, { status: 202 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Analysis failed'

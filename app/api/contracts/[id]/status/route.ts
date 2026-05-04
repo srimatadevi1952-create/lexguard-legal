@@ -16,9 +16,11 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   }
 
+  // Select created_at too — used as fallback if updated_at is missing/NaN
+  // (hand-authored types may not expose updated_at; cast via unknown to access it)
   const { data: contract, error } = await supabase
     .from('contracts')
-    .select('id, execution_status, risk_score, risk_level, analysis_completed_at, analysis_error, updated_at')
+    .select('id, execution_status, risk_score, risk_level, analysis_completed_at, analysis_error, updated_at, created_at')
     .eq('id', params.id)
     .single()
 
@@ -26,28 +28,50 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  // Access timestamps through unknown cast — hand-authored types may not
+  // include these columns, but Supabase always returns them from the select.
+  const raw = contract as unknown as Record<string, unknown>
+  const updatedAtStr  = (raw.updated_at  as string | null) ?? null
+  const createdAtStr  = (raw.created_at  as string | null) ?? null
+  const analysisError = (raw.analysis_error as string | null) ?? null
+
   let { execution_status } = contract
-  let analysis_error = contract.analysis_error ?? null
+  let effectiveAnalysisError = analysisError
 
   // Auto-recover contracts stuck in 'analysing' after a Vercel timeout.
-  // The function is killed before the catch block can write analysis_failed,
-  // so the contract stays in 'analysing' forever without this check.
   if (execution_status === 'analysing') {
-    const startedAt = new Date(contract.updated_at).getTime()
-    if (Date.now() - startedAt > STUCK_TIMEOUT_MS) {
+    // Prefer updated_at (stamped when we set analysing); fall back to created_at.
+    const timestampStr = updatedAtStr ?? createdAtStr
+    const startedAt    = timestampStr ? new Date(timestampStr).getTime() : NaN
+    const ageMs        = Number.isNaN(startedAt) ? Infinity : Date.now() - startedAt
+
+    console.log(`[status] stuck-check id=${params.id}`, {
+      updated_at: updatedAtStr,
+      created_at: createdAtStr,
+      age_ms: ageMs,
+      threshold_ms: STUCK_TIMEOUT_MS,
+      will_recover: ageMs > STUCK_TIMEOUT_MS,
+    })
+
+    if (ageMs > STUCK_TIMEOUT_MS) {
       const errorMsg = 'Pipeline timed out (Vercel function limit exceeded)'
-      console.warn(`[status] contract ${params.id} stuck in analysing since ${contract.updated_at} — marking failed`)
+      console.warn(`[status] recovering stuck contract ${params.id} — age=${Math.round(ageMs / 1000)}s`)
       const admin = createAdminClient()
-      await admin
+      const { error: updateErr } = await admin
         .from('contracts')
         .update({
           execution_status: 'analysis_failed',
           analysis_error: errorMsg,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', params.id)
-        .eq('execution_status', 'analysing') // guard against concurrent updates
-      execution_status = 'analysis_failed'
-      analysis_error = errorMsg
+        .eq('execution_status', 'analysing') // guard against race condition
+      if (updateErr) {
+        console.error('[status] failed to mark stuck contract:', updateErr.message)
+      } else {
+        execution_status = 'analysis_failed'
+        effectiveAnalysisError = errorMsg
+      }
     }
   }
 
@@ -68,6 +92,6 @@ export async function GET(
     execution_status,
     risk_score: contract.risk_score,
     risk_level: contract.risk_level,
-    analysis_error,
+    analysis_error: effectiveAnalysisError,
   })
 }
