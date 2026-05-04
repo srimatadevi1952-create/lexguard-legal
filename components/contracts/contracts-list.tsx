@@ -32,6 +32,7 @@ export const STATUS_LABELS: Record<ContractExecutionStatus, string> = {
   executed:        'Executed',
   archived:        'Archived',
   analysis_failed: 'Analysis Failed',
+  analysing:       'Analysing…',
 }
 
 const STATUS_COLORS: Record<ContractExecutionStatus, string> = {
@@ -40,6 +41,7 @@ const STATUS_COLORS: Record<ContractExecutionStatus, string> = {
   executed:        'bg-green-50 text-green-700',
   archived:        'bg-gray-100 text-gray-400',
   analysis_failed: 'bg-red-50 text-red-600',
+  analysing:       'bg-amber-50 text-amber-700',
 }
 
 const RISK_COLORS: Record<RiskLevel, string> = {

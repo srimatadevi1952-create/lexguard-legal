@@ -127,19 +127,27 @@ ${safeText}`
   })
 }
 
-// ── Risk analysis (Prompt B) ──────────────────────────────────────────────────
+// ── Risk analysis (Prompt B) — batched + parallel ─────────────────────────────
 
-export async function analyseRisk(contractText: string, clauses: ClauseRaw[]): Promise<FlagRaw[]> {
+const RISK_BATCH_SIZE = 10
+// Analyse at most 5 batches (50 clauses) in parallel; each call stays <25s.
+const MAX_RISK_BATCHES = 5
+
+async function analyseRiskBatch(
+  contractText: string,
+  clauses: ClauseRaw[],
+  batchIndex: number,
+): Promise<FlagRaw[]> {
   const clauseSummary = clauses
-    .map((c) => `[${c.clause_number}] ${c.heading}: ${c.text.slice(0, 300)}`)
+    .map((c) => `[${c.clause_number}] ${c.heading}: ${c.text.slice(0, 400)}`)
     .join('\n\n')
 
-  const prompt = `Analyse the following Indian-law contract for legal issues.
+  const prompt = `Analyse the following Indian-law contract clauses for legal issues.
 
 Return ONLY a JSON array of flag objects. No other text.
 
 Each flag must have exactly these fields:
-- clause_number: string | null (matches a clause_number from the extracted clauses; null if contract-wide)
+- clause_number: string | null (matches a clause_number from the list below; null if contract-wide)
 - severity: "low" | "medium" | "high" | "critical"
 - category: "dpdp" | "gst" | "contract_act" | "it_act" | "companies_act" | "labour" | "sebi" | "fema" | "commercial" | "drafting"
 - title: string (concise flag title, ≤10 words)
@@ -153,20 +161,47 @@ IMPORTANT:
 - Flag only genuine issues. Do NOT invent problems.
 - Reference actual Indian statutes, not US or UK law.
 - Severity guide: critical = immediate legal risk/unenforceability; high = significant commercial/regulatory risk; medium = suboptimal but not immediately harmful; low = drafting improvements.
+- Only flag issues for the clauses listed in CLAUSE BATCH below.
 
-FULL CONTRACT TEXT:
-${contractText.slice(0, 12000)}
+CONTRACT CONTEXT (first 8000 chars):
+${contractText.slice(0, 8000)}
 
-EXTRACTED CLAUSE SUMMARY:
-${clauseSummary.slice(0, 4000)}`
+CLAUSE BATCH ${batchIndex + 1} TO ANALYSE:
+${clauseSummary}`
 
   return callClaudeWithJsonRetry<FlagRaw[]>({
     model: 'claude-opus-4-6',
     system: 'You are an expert Indian contract lawyer specialising in contract risk analysis. Output ONLY valid JSON arrays.',
     prompt,
-    maxTokens: 8192,
-    label: 'analyseRisk',
+    maxTokens: 4096,
+    label: `analyseRisk-b${batchIndex}`,
   })
+}
+
+export async function analyseRisk(contractText: string, clauses: ClauseRaw[]): Promise<FlagRaw[]> {
+  const activeClauses = clauses.slice(0, RISK_BATCH_SIZE * MAX_RISK_BATCHES)
+  if (clauses.length > activeClauses.length) {
+    console.warn(
+      `[analysis] clause count ${clauses.length} exceeds limit — ` +
+      `analysing first ${activeClauses.length} clauses only`
+    )
+  }
+
+  const batches: ClauseRaw[][] = []
+  for (let i = 0; i < activeClauses.length; i += RISK_BATCH_SIZE) {
+    batches.push(activeClauses.slice(i, i + RISK_BATCH_SIZE))
+  }
+
+  console.log(
+    `[analysis] risk analysis: ${batches.length} parallel batch(es) of ≤${RISK_BATCH_SIZE} clauses`
+  )
+
+  // All batches run in parallel — each has its own 25s timeout inside callClaude
+  const batchResults = await Promise.all(
+    batches.map((batch, i) => analyseRiskBatch(contractText, batch, i))
+  )
+
+  return batchResults.flat()
 }
 
 // ── English summary (Prompt C) ────────────────────────────────────────────────

@@ -5,9 +5,8 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 export type ClaudeModel = 'claude-opus-4-6' | 'claude-sonnet-4-6'
 
 // Characters above this threshold are truncated before sending to Claude.
-// ~100k chars ≈ ~25k tokens — well within the 200k context window but
-// prevents runaway prompts from SEC-wrapper or preamble-heavy documents.
-export const MAX_CONTRACT_CHARS = 100_000
+// ~50k chars ≈ ~12k tokens — keeps each call well under 25s on Vercel.
+export const MAX_CONTRACT_CHARS = 50_000
 
 /**
  * Truncate contract text to a safe length. Logs a warning if truncation
@@ -44,13 +43,22 @@ export async function callClaude(params: {
 
   let response: Awaited<ReturnType<typeof client.messages.create>>
   try {
-    response = await client.messages.create({
-      model: params.model,
-      max_tokens: params.maxTokens ?? 8192,
-      ...(params.system ? { system: params.system } : {}),
-      messages: [{ role: 'user', content: params.prompt }],
-    })
+    response = await client.messages.create(
+      {
+        model: params.model,
+        max_tokens: params.maxTokens ?? 8192,
+        ...(params.system ? { system: params.system } : {}),
+        messages: [{ role: 'user', content: params.prompt }],
+      },
+      // Hard 25s per-call timeout — prevents any single call from blocking the
+      // Vercel function long enough to trigger the platform-level 60s timeout.
+      { timeout: 25_000 }
+    )
   } catch (err) {
+    if (err instanceof Anthropic.APIConnectionTimeoutError) {
+      console.error(`[claude:${label}] TIMEOUT after 25s`)
+      throw new Error(`Claude API timeout after 25s [${label}] — reduce contract size or retry`)
+    }
     if (err instanceof Anthropic.APIError) {
       console.error(
         `[claude:${label}] SDK APIError status=${err.status} name=${err.name} msg=${err.message}`

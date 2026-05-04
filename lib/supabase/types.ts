@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 // Contract Intelligence enums
 export type ContractType = 'nda' | 'msa' | 'sla' | 'employment' | 'vendor' | 'lease' | 'shareholder' | 'loan' | 'jv' | 'other'
-export type ContractExecutionStatus = 'draft' | 'under_review' | 'executed' | 'archived' | 'analysis_failed'
+export type ContractExecutionStatus = 'draft' | 'under_review' | 'executed' | 'archived' | 'analysis_failed' | 'analysing'
 export type FlagSeverity = 'low' | 'medium' | 'high' | 'critical'
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 export type FlagCategory = 'dpdp' | 'gst' | 'contract_act' | 'it_act' | 'companies_act' | 'labour' | 'sebi' | 'fema' | 'commercial' | 'drafting'

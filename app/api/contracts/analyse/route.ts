@@ -4,7 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { runAnalysisPipeline } from '@/lib/contracts/analysis'
 import { logAudit } from '@/lib/supabase/audit'
 
-export const maxDuration = 120 // 2 min — requires Vercel Pro for full effect
+// 2-min cap on the Vercel function. The pipeline is fire-and-forget: we return
+// 202 immediately then Vercel's Node.js runtime keeps the function alive until
+// all pending async work drains (or maxDuration is hit).
+export const maxDuration = 120
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,20 +34,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Contract not found or access denied' }, { status: 404 })
     }
 
-    // Run the full analysis pipeline (uses admin client internally)
-    await runAnalysisPipeline(contractId)
-
-    // Log audit event
+    // Mark as analysing so the polling endpoint immediately reflects progress
     const admin = createAdminClient()
-    await logAudit(admin as Parameters<typeof logAudit>[0], {
-      orgId: contract.org_id,
-      entityType: 'contract',
-      entityId: contractId,
-      action: 'analysis_completed',
-      after: { title: contract.title },
-    })
+    await admin
+      .from('contracts')
+      .update({ execution_status: 'analysing' })
+      .eq('id', contractId)
 
-    return NextResponse.json({ success: true, contract_id: contractId })
+    // Fire-and-forget: start pipeline without awaiting.
+    // Vercel's Node.js runtime keeps the function alive until the event loop
+    // drains (up to maxDuration=120s), so the pipeline continues running after
+    // we return the 202 below — no browser-level gateway timeout.
+    void runAnalysisPipeline(contractId)
+      .then(async () => {
+        await logAudit(admin as Parameters<typeof logAudit>[0], {
+          orgId: contract.org_id,
+          entityType: 'contract',
+          entityId: contractId,
+          action: 'analysis_completed',
+          after: { title: contract.title },
+        })
+      })
+      .catch((err: unknown) => {
+        console.error(
+          '[analyse] background pipeline error:',
+          err instanceof Error ? err.message : err
+        )
+      })
+
+    return NextResponse.json({ status: 'analysing', contract_id: contractId }, { status: 202 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Analysis failed'
     console.error('[analyse] error:', message)

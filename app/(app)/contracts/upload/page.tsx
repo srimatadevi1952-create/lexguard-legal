@@ -179,28 +179,52 @@ export default function UploadPage() {
 
       if (versionErr) throw new Error(`Failed to save version: ${versionErr.message}`)
 
-      // 4. Animate progress while analysis runs
-      const animInterval = setInterval(() => {
-        setAnalysisStep((s) => Math.min(s + 1, ANALYSIS_STEPS.length - 2))
-      }, 4500)
-
-      // 5. Call analysis API
+      // 4. Kick off analysis — server returns 202 immediately and runs in background
       const res = await fetch('/api/contracts/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contract_id: contract.id }),
       })
 
-      clearInterval(animInterval)
-      setAnalysisStep(ANALYSIS_STEPS.length - 1)
-
       if (!res.ok) {
         const body = await res.json() as { error?: string }
-        throw new Error(body.error ?? 'Analysis failed')
+        throw new Error(body.error ?? 'Analysis failed to start')
       }
 
+      // 5. Animate progress steps while polling the status endpoint every 5s
+      const animInterval = setInterval(() => {
+        setAnalysisStep((s) => Math.min(s + 1, ANALYSIS_STEPS.length - 2))
+      }, 5000)
+
+      await new Promise<void>((resolve, reject) => {
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/api/contracts/${contract.id}/status`)
+            if (!statusRes.ok) return // transient error — keep polling
+
+            const { status, } = await statusRes.json() as {
+              status: 'analysing' | 'completed' | 'failed'
+            }
+
+            if (status === 'completed') {
+              clearInterval(pollInterval)
+              clearInterval(animInterval)
+              resolve()
+            } else if (status === 'failed') {
+              clearInterval(pollInterval)
+              clearInterval(animInterval)
+              reject(new Error('Analysis failed — please try again or open the contract to retry'))
+            }
+            // status === 'analysing' → keep polling
+          } catch {
+            // Network error — keep polling silently
+          }
+        }, 5000)
+      })
+
       // 6. Redirect to contract detail
-      await new Promise((r) => setTimeout(r, 800))
+      setAnalysisStep(ANALYSIS_STEPS.length - 1)
+      await new Promise((r) => setTimeout(r, 600))
       router.push(`/contracts/${contract.id}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'An error occurred'
