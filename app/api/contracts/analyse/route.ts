@@ -35,11 +35,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Contract not found or access denied' }, { status: 404 })
     }
 
-    // Mark as analysing immediately so the polling endpoint reflects progress
+    // Mark as analysing immediately so the polling endpoint reflects progress.
+    // Stamp updated_at so the stuck-contract detector in /status has an
+    // accurate start time (Supabase doesn't auto-update this column).
     const admin = createAdminClient()
     await admin
       .from('contracts')
-      .update({ execution_status: 'analysing' })
+      .update({ execution_status: 'analysing', updated_at: new Date().toISOString() })
       .eq('id', contractId)
 
     // waitUntil() tells Vercel to keep this function alive until the promise

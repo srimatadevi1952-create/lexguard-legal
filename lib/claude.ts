@@ -50,14 +50,14 @@ export async function callClaude(params: {
         ...(params.system ? { system: params.system } : {}),
         messages: [{ role: 'user', content: params.prompt }],
       },
-      // Hard 25s per-call timeout — prevents any single call from blocking the
-      // Vercel function long enough to trigger the platform-level 60s timeout.
-      { timeout: 25_000 }
+      // 20s per-call cap — leaves headroom for 3 sequential Claude steps
+      // (extract + risk-parallel + summary) inside Vercel Hobby's 60s limit.
+      { timeout: 20_000 }
     )
   } catch (err) {
     if (err instanceof Anthropic.APIConnectionTimeoutError) {
-      console.error(`[claude:${label}] TIMEOUT after 25s`)
-      throw new Error(`Claude API timeout after 25s [${label}] — reduce contract size or retry`)
+      console.error(`[claude:${label}] TIMEOUT after 20s`)
+      throw new Error(`Claude API timeout after 20s [${label}] — reduce contract size or retry`)
     }
     if (err instanceof Anthropic.APIError) {
       console.error(

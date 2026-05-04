@@ -129,9 +129,11 @@ ${safeText}`
 
 // ── Risk analysis (Prompt B) — batched + parallel ─────────────────────────────
 
-const RISK_BATCH_SIZE = 10
-// Analyse at most 5 batches (50 clauses) in parallel; each call stays <25s.
-const MAX_RISK_BATCHES = 5
+// 15 clauses per batch → fewer parallel calls → faster total on Hobby plan.
+const RISK_BATCH_SIZE = 15
+// Max 3 batches (45 clauses). Larger contracts are truncated at 50k chars
+// so the clause count is bounded in practice.
+const MAX_RISK_BATCHES = 3
 
 async function analyseRiskBatch(
   contractText: string,
@@ -363,8 +365,21 @@ async function _runPipeline(
     .update({ extracted_text: extractedText })
     .eq('id', version.id)
 
-  // 5. Prompt A — extract clauses
-  const rawClauses = await extractClauses(extractedText)
+  // 5. Prompt A — extract clauses (skip for small docs to save ~15s)
+  // ~3 pages ≈ 10 000 chars; small docs get a single synthetic clause instead.
+  const SMALL_DOC_THRESHOLD = 10_000
+  let rawClauses: ClauseRaw[]
+  if (extractedText.length < SMALL_DOC_THRESHOLD) {
+    console.log(`[pipeline] small doc (${extractedText.length} chars) — skipping clause extraction`)
+    rawClauses = [{
+      clause_number: '1',
+      heading: 'Full Document',
+      text: extractedText,
+      parent_index: null,
+    }]
+  } else {
+    rawClauses = await extractClauses(extractedText)
+  }
 
   // 6. Build clause parent map and save
   const clauseIdByIndex = new Map<number, string>()
@@ -425,16 +440,16 @@ async function _runPipeline(
   // 9. Prompt C — English summary
   const enSummary = await generateEnglishSummary(extractedText)
 
-  // 10. Prompt D — Hindi translation
-  const hiSummary = await translateToHindi(enSummary)
+  // Hindi translation skipped on Hobby plan — saves 15-20s.
+  // Re-enable by calling translateToHindi(enSummary) when on Pro plan.
 
-  // 11. Save summary
+  // 10. Save summary (Hindi fields left null for now)
   await admin.from('contract_summaries').upsert({
     contract_id: contractId,
     summary_en_short: enSummary.summary_short,
     summary_en_long: enSummary.summary_long,
-    summary_hi_short: hiSummary.summary_short_hi,
-    summary_hi_long: hiSummary.summary_long_hi,
+    summary_hi_short: null,
+    summary_hi_long: null,
     key_terms: enSummary.key_terms,
   })
 
