@@ -122,17 +122,24 @@ export default function UploadPage() {
     setAnalysisStep(0)
     setAnalysisError(null)
 
+    console.log('[upload] onSubmit started', { title: data.title, file: file.name, size: file.size })
+
     const supabase = createClient()
 
     try {
       // Get current user + org
-      const { data: { user } } = await supabase.auth.getUser()
+      console.log('[upload] step: getUser')
+      const { data: { user }, error: userErr } = await supabase.auth.getUser()
+      console.log('[upload] getUser result', { userId: user?.id, error: userErr?.message })
       if (!user) throw new Error('Not authenticated')
 
-      const { data: orgId } = await supabase.rpc('current_org_id')
+      console.log('[upload] step: current_org_id')
+      const { data: orgId, error: orgErr } = await supabase.rpc('current_org_id')
+      console.log('[upload] current_org_id result', { orgId, error: orgErr?.message })
       if (!orgId) throw new Error('No active organisation')
 
       // 1. Create contract record
+      console.log('[upload] step 1: insert contract row')
       const { data: contract, error: contractErr } = await supabase
         .from('contracts')
         .insert({
@@ -149,6 +156,7 @@ export default function UploadPage() {
         .select('id')
         .single()
 
+      console.log('[upload] step 1 result', { contractId: contract?.id, error: contractErr?.message })
       if (contractErr || !contract) throw new Error(contractErr?.message ?? 'Failed to create contract')
       setContractId(contract.id)
       setAnalysisStep(1)
@@ -156,15 +164,18 @@ export default function UploadPage() {
       // 2. Upload file to storage
       const ext = file.name.split('.').pop() ?? 'pdf'
       const filePath = `org_${orgId}/contracts/${contract.id}/v1.${ext}`
+      console.log('[upload] step 2: storage upload', { filePath, contentType: file.type })
 
       const { error: uploadErr } = await supabase.storage
         .from('contracts')
         .upload(filePath, file, { contentType: file.type })
 
+      console.log('[upload] step 2 result', { error: uploadErr?.message ?? 'ok' })
       if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`)
       setAnalysisStep(2)
 
       // 3. Create version record
+      console.log('[upload] step 3: insert contract_versions row')
       const { error: versionErr } = await supabase
         .from('contract_versions')
         .insert({
@@ -177,21 +188,26 @@ export default function UploadPage() {
           created_by: user.id,
         })
 
+      console.log('[upload] step 3 result', { error: versionErr?.message ?? 'ok' })
       if (versionErr) throw new Error(`Failed to save version: ${versionErr.message}`)
 
       // 4. Kick off analysis — server returns 202 immediately and runs in background
+      console.log('[upload] step 4: POST /api/contracts/analyse', { contract_id: contract.id })
       const res = await fetch('/api/contracts/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contract_id: contract.id }),
       })
 
+      console.log('[upload] step 4 result', { status: res.status, ok: res.ok })
       if (!res.ok) {
         const body = await res.json() as { error?: string }
+        console.error('[upload] step 4 error body', body)
         throw new Error(body.error ?? 'Analysis failed to start')
       }
 
       // 5. Animate progress steps while polling the status endpoint every 5s
+      console.log('[upload] step 5: starting status poll for', contract.id)
       const animInterval = setInterval(() => {
         setAnalysisStep((s) => Math.min(s + 1, ANALYSIS_STEPS.length - 2))
       }, 5000)
@@ -200,34 +216,43 @@ export default function UploadPage() {
         const pollInterval = setInterval(async () => {
           try {
             const statusRes = await fetch(`/api/contracts/${contract.id}/status`)
-            if (!statusRes.ok) return // transient error — keep polling
-
-            const { status, } = await statusRes.json() as {
-              status: 'analysing' | 'completed' | 'failed'
+            if (!statusRes.ok) {
+              console.warn('[upload] poll: non-ok status', statusRes.status, '— retrying')
+              return
             }
 
-            if (status === 'completed') {
+            const payload = await statusRes.json() as {
+              status: 'analysing' | 'completed' | 'failed'
+              execution_status: string
+            }
+            console.log('[upload] poll tick', payload)
+
+            if (payload.status === 'completed') {
+              console.log('[upload] poll: completed — redirecting')
               clearInterval(pollInterval)
               clearInterval(animInterval)
               resolve()
-            } else if (status === 'failed') {
+            } else if (payload.status === 'failed') {
+              console.error('[upload] poll: analysis_failed reported by server')
               clearInterval(pollInterval)
               clearInterval(animInterval)
               reject(new Error('Analysis failed — please try again or open the contract to retry'))
             }
             // status === 'analysing' → keep polling
-          } catch {
-            // Network error — keep polling silently
+          } catch (pollErr) {
+            console.warn('[upload] poll: network error, retrying', pollErr)
           }
         }, 5000)
       })
 
       // 6. Redirect to contract detail
+      console.log('[upload] step 6: redirecting to /contracts/' + contract.id)
       setAnalysisStep(ANALYSIS_STEPS.length - 1)
       await new Promise((r) => setTimeout(r, 600))
       router.push(`/contracts/${contract.id}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'An error occurred'
+      console.error('[upload] FAILED at:', msg, err)
       setAnalysisError(msg)
       toast.error(msg)
     }
