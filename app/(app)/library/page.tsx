@@ -12,11 +12,16 @@ export default async function LibraryPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Fetch all clauses (RLS returns global + current org's private)
-  const { data: clausesRaw } = await supabase
+  const { data: clausesRaw, error: clausesErr } = await supabase
     .from('clauses')
     .select('*')
     .order('category')
     .order('title')
+
+  if (clausesErr) {
+    console.error('[library/page] clauses query error:', clausesErr)
+  }
+  console.log('[library/page] clausesRaw count:', clausesRaw?.length ?? 0, 'user:', user?.id ?? 'none')
 
   const clauses = (clausesRaw ?? []) as Clause[]
 
