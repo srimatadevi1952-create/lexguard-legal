@@ -170,13 +170,32 @@ ${contractText.slice(0, 8000)}
 CLAUSE BATCH ${batchIndex + 1} TO ANALYSE:
 ${clauseSummary}`
 
-  return callClaudeWithJsonRetry<FlagRaw[]>({
-    model: 'claude-sonnet-4-6',
-    system: 'You are an expert Indian contract lawyer specialising in contract risk analysis. Output ONLY valid JSON arrays.',
-    prompt,
-    maxTokens: 4096,
-    label: `analyseRisk-b${batchIndex}`,
-  })
+  const model = 'claude-sonnet-4-6'
+  const label = `analyseRisk-b${batchIndex}`
+
+  console.log(
+    `[${label}] PRE-CALL` +
+    ` | model=${model}` +
+    ` | clauses_in_batch=${clauses.length}` +
+    ` | prompt_chars=${prompt.length}` +
+    ` | prompt_preview=${JSON.stringify(prompt.slice(0, 200))}`
+  )
+
+  const t0 = Date.now()
+  try {
+    const result = await callClaudeWithJsonRetry<FlagRaw[]>({
+      model,
+      system: 'You are an expert Indian contract lawyer specialising in contract risk analysis. Output ONLY valid JSON arrays.',
+      prompt,
+      maxTokens: 4096,
+      label,
+    })
+    console.log(`[${label}] POST-CALL elapsed=${Date.now() - t0}ms flags_returned=${result.length}`)
+    return result
+  } catch (err) {
+    console.error(`[${label}] POST-CALL FAILED elapsed=${Date.now() - t0}ms err=${err instanceof Error ? err.message : String(err)}`)
+    throw err
+  }
 }
 
 export async function analyseRisk(contractText: string, clauses: ClauseRaw[]): Promise<FlagRaw[]> {
