@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { CalendarClient } from '@/components/calendar/calendar-client'
 import type { CalendarEvent } from '@/components/calendar/calendar-client'
 
@@ -8,16 +10,33 @@ export const metadata: Metadata = { title: 'Legal Calendar — LexGuard Legal' }
 
 export default async function CalendarPage() {
   const supabase = createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
-  console.log('[calendar/page] auth user:', user?.id ?? 'NONE')
+  if (!user) redirect('/login')
 
-  const { data: eventsRaw, error: eventsErr } = await supabase
+  const admin = createAdminClient()
+
+  const { data: orgMember } = await admin
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (!orgMember) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <p className="text-slate-500">No organisation found for your account. Please complete onboarding.</p>
+      </div>
+    )
+  }
+
+  const { data: eventsRaw } = await admin
     .from('calendar_events')
     .select('*')
+    .eq('org_id', orgMember.org_id)
     .order('due_date')
-
-  console.log('[calendar/page] query result — count:', eventsRaw?.length ?? 0, 'error:', eventsErr ?? null)
 
   const events = (eventsRaw ?? []) as CalendarEvent[]
 

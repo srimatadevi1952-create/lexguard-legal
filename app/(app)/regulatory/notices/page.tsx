@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Bell, Plus, ChevronRight, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const metadata: Metadata = { title: 'Regulator Notices — LexGuard Legal' }
 
@@ -55,17 +57,33 @@ function DaysBadge({ days, status }: { days: number; status: string }) {
 
 export default async function NoticesPage() {
   const supabase = createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
-  console.log('[notices/page] auth user:', user?.id ?? 'NONE')
+  if (!user) redirect('/login')
 
-  const { data: notices, error } = await supabase
+  const admin = createAdminClient()
+
+  const { data: orgMember } = await admin
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (!orgMember) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <p className="text-slate-500">No organisation found for your account. Please complete onboarding.</p>
+      </div>
+    )
+  }
+
+  const { data: notices } = await admin
     .from('regulator_notices')
     .select('id, issuer, issuer_office, notice_ref, notice_type, received_date, deadline_date, status, created_at')
+    .eq('org_id', orgMember.org_id)
     .order('deadline_date', { ascending: true })
-
-  console.log('[notices/page] query result — count:', notices?.length ?? 0, 'error:', error ?? null)
-  if (error) console.error('[notices/page] query error:', error)
 
   const rows = (notices ?? []) as RegulatorNotice[]
   const open    = rows.filter((n) => n.status === 'new' || n.status === 'in_progress').length

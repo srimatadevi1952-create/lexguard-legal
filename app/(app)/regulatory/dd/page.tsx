@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { FileSearch, Plus, ChevronRight, Calendar } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const metadata: Metadata = { title: 'Due Diligence — LexGuard Legal' }
 
@@ -33,17 +35,33 @@ function daysUntil(iso: string): number {
 
 export default async function DDPage() {
   const supabase = createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
-  console.log('[dd/page] auth user:', user?.id ?? 'NONE')
+  if (!user) redirect('/login')
 
-  const { data: matters, error } = await supabase
+  const admin = createAdminClient()
+
+  const { data: orgMember } = await admin
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (!orgMember) {
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <p className="text-slate-500">No organisation found for your account. Please complete onboarding.</p>
+      </div>
+    )
+  }
+
+  const { data: matters } = await admin
     .from('dd_matters')
     .select('*')
+    .eq('org_id', orgMember.org_id)
     .order('created_at', { ascending: false })
-
-  console.log('[dd/page] query result — count:', matters?.length ?? 0, 'error:', error ?? null)
-  if (error) console.error('[dd/page] query error:', error)
 
   const rows = (matters ?? []) as DDMatter[]
 
