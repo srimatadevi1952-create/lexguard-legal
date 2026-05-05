@@ -340,6 +340,100 @@ applicable_contract_types (checkbox).
 
 ---
 
+## Calendar (Prompt 5)
+
+### Migration
+`supabase/migrations/20260505000015_workflow.sql` — 9 enums + 5 tables:
+`calendar_events`, `calendar_reminders`, `dd_matters`, `dd_checklist_items`, `regulator_notices`.
+
+### Reminder cascade pattern
+```typescript
+// Create reminders for an event at offsets T-30, T-15, T-7, T-3, T-1, T-0
+const offsets = [30, 15, 7, 3, 1, 0]
+const rows = offsets.map((days) => {
+  const sendAt = new Date(dueDate)
+  sendAt.setDate(sendAt.getDate() - days)
+  return { org_id, event_id, offset_days: days, scheduled_send_at: sendAt.toISOString(), status: 'scheduled', channel: 'email' }
+})
+await supabase.from('calendar_reminders').insert(rows)
+```
+
+### Process-reminders endpoint
+`POST /api/calendar/process-reminders` — called by cron. Requires `x-cron-secret` header.
+- Email: Resend REST API (`RESEND_API_KEY`, `RESEND_FROM`, `RESEND_TO_OVERRIDE` env vars)
+- WhatsApp: scaffolded with `TODO` comment (requires DLT template approval via MSG91)
+- In-app: inserts into `notifications` table using admin client
+
+### Calendar UI
+| Path | Type | Purpose |
+|---|---|---|
+| `app/(app)/calendar/page.tsx` | Server | Stats + passes all events to CalendarClient |
+| `components/calendar/calendar-client.tsx` | Client | Month grid + list view + event detail modal |
+
+Color codes: DPDP=red, MCA=blue, SEBI=purple, Labour=green, GST=orange, Contracts=teal, Custom=grey.
+
+---
+
+## M&A Due Diligence (Prompt 5)
+
+### Deterministic checklist generator pattern
+```typescript
+import { generateDDChecklist } from '@/lib/dd/checklist-templates'
+const items = generateDDChecklist(transactionType, sector, sizeBracket)
+// Returns ChecklistTemplate[]: { category, item_text, risk }
+// 50 common items + sector items (tech/pharma/RE/FS/mfg) + size items (small/mid/large)
+// + transaction-type items (asset/slump_sale/merger) = 80-120+ items
+```
+
+### API Routes
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/regulatory/dd` | POST | Create matter + generate checklist items + calendar event |
+| `/api/regulatory/dd/[id]/items` | PATCH | Update item status/risk/finding; recalculate completion_pct |
+| `/api/regulatory/dd/[id]/export` | GET | CSV download of full checklist + findings |
+
+### Pages
+| Path | Type | Purpose |
+|---|---|---|
+| `app/(app)/regulatory/dd/page.tsx` | Server | List of DD matters with progress bars |
+| `app/(app)/regulatory/dd/new/page.tsx` | Client | 3-step wizard (matter info → transaction shape → confirm) |
+| `app/(app)/regulatory/dd/[id]/page.tsx` | Server | Fetches matter + items, renders DDMatterDetail |
+| `components/regulatory/dd-matter-detail.tsx` | Client | Grouped checklist, item drawer, CSV export |
+
+---
+
+## Regulator Notice Response Assistant (Prompt 5)
+
+### Template-based notice response pattern
+```typescript
+import { generateNoticeResponse } from '@/lib/regulatory/notice-templates'
+const brief = generateNoticeResponse(issuer, noticeType, demands)
+// issuer: 'mca'|'sebi'|'cci'|'it_dept'|'gst'|'rbi'|'dpb'|'state'|'labour'|'other'
+// Returns structured plain-text brief with 5 sections:
+//   1. Legal framework  2. Response structure  3. Documents  4. Tone  5. Risk flags
+```
+
+### API Routes
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/regulatory/notices` | POST | Create notice + generate brief + calendar event + reminders |
+
+### Pages
+| Path | Type | Purpose |
+|---|---|---|
+| `app/(app)/regulatory/notices/page.tsx` | Server | Notices inbox with urgency badges |
+| `app/(app)/regulatory/notices/new/page.tsx` | Client | Log form with issuer dropdown |
+| `app/(app)/regulatory/notices/[id]/page.tsx` | Server | Fetches notice, renders NoticeDetail |
+| `components/regulatory/notice-detail.tsx` | Client | Shows/edits response brief, status control |
+
+### Seed
+`supabase/seed_workflow.sql`:
+- 12 calendar events across all regime types (DPDP, MCA, SEBI, Labour, GST, Contracts)
+- 1 active DD matter: Project Horizon — TechCorp Solutions (Tech, Large, 90d close)
+- 2 regulator notices: MCA SCN under Section 206(4), IT Dept Section 148 reopening
+
+---
+
 ## API Routes
 
 <!-- app/api/* route handlers, request/response shapes added here -->
