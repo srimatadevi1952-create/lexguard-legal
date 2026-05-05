@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       party_position?:           string
       applicable_acts?:          string[]
       applicable_contract_types?: string[]
-      references?:               string | null
+      statute_references?:       string | null
     }
 
     if (!body.title?.trim() || !body.clause_text_en?.trim() || !body.category) {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         party_position:            partyPosition as 'drafter_favours' | 'counterparty_favours' | 'neutral',
         applicable_acts:           body.applicable_acts ?? [],
         applicable_contract_types: body.applicable_contract_types ?? [],
-        references:                body.references ?? null,
+        statute_references:        body.statute_references ?? null,
         visibility:                'org_private',
         created_by:                user.id,
       })

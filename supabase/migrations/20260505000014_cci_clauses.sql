@@ -96,7 +96,7 @@ CREATE TABLE public.clauses (
   party_position            public.clause_party_pos NOT NULL DEFAULT 'neutral',
   applicable_acts           TEXT[]  NOT NULL DEFAULT '{}',
   applicable_contract_types TEXT[]  NOT NULL DEFAULT '{}',
-  references                TEXT,
+  statute_references        TEXT,
   visibility                public.clause_visibility NOT NULL DEFAULT 'global',
   created_by                UUID    REFERENCES public.users(id),
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -901,7 +901,7 @@ export interface Database {
           party_position: 'drafter_favours' | 'counterparty_favours' | 'neutral'
           applicable_acts: string[]
           applicable_contract_types: string[]
-          references: string | null
+          statute_references: string | null
           visibility: 'global' | 'org_private'
           created_by: string | null
           created_at: string
@@ -919,7 +919,7 @@ export interface Database {
           party_position?: 'drafter_favours' | 'counterparty_favours' | 'neutral'
           applicable_acts?: string[]
           applicable_contract_types?: string[]
-          references?: string | null
+          statute_references?: string | null
           visibility?: 'global' | 'org_private'
           created_by?: string | null
           created_at?: string
@@ -935,7 +935,7 @@ export interface Database {
           party_position?: 'drafter_favours' | 'counterparty_favours' | 'neutral'
           applicable_acts?: string[]
           applicable_contract_types?: string[]
-          references?: string | null
+          statute_references?: string | null
           visibility?: 'global' | 'org_private'
           updated_at?: string
         }

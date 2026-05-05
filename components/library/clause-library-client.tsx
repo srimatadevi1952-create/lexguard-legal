@@ -18,7 +18,7 @@ export interface Clause {
   party_position: 'drafter_favours' | 'counterparty_favours' | 'neutral'
   applicable_acts: string[]
   applicable_contract_types: string[]
-  references: string | null
+  statute_references: string | null
   visibility: 'global' | 'org_private'
 }
 
@@ -170,8 +170,8 @@ function ClauseCard({ clause }: { clause: Clause }) {
               </div>
             )}
 
-            {clause.references && (
-              <p className="text-xs text-slate-400">Ref: {clause.references}</p>
+            {clause.statute_references && (
+              <p className="text-xs text-slate-400">Ref: {clause.statute_references}</p>
             )}
           </div>
         )}
@@ -202,7 +202,7 @@ function AddClauseModal({
   const [form, setForm] = useState({
     title: '', category: 'Confidentiality', clause_text_en: '', clause_text_hi: '',
     use_case: '', risk_notes: '', party_position: 'neutral',
-    applicable_acts: '', applicable_contract_types: '', references: '',
+    applicable_acts: '', applicable_contract_types: '', statute_references: '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -231,7 +231,7 @@ function AddClauseModal({
           party_position:           form.party_position,
           applicable_acts:          form.applicable_acts.split(',').map((s) => s.trim()).filter(Boolean),
           applicable_contract_types: form.applicable_contract_types.split(',').map((s) => s.trim()).filter(Boolean),
-          references:               form.references.trim() || null,
+          statute_references:       form.statute_references.trim() || null,
         }),
       })
       const body = await res.json() as { clause?: Clause; error?: string }
@@ -335,7 +335,7 @@ function AddClauseModal({
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">References / Citations</label>
-            <input value={form.references} onChange={(e) => set('references', e.target.value)}
+            <input value={form.statute_references} onChange={(e) => set('statute_references', e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/30 focus:border-brand-teal"
               placeholder="e.g. Section 27, Indian Contract Act 1872" />
           </div>

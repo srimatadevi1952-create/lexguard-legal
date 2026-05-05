@@ -89,7 +89,7 @@ END $$;
 -- ---------------------------------------------------------------------------
 
 -- CONFIDENTIALITY (5) -------------------------------------------------------
-INSERT INTO public.clauses (title, category, clause_text_en, clause_text_hi, use_case, risk_notes, party_position, applicable_acts, applicable_contract_types, references, visibility) VALUES
+INSERT INTO public.clauses (title, category, clause_text_en, clause_text_hi, use_case, risk_notes, party_position, applicable_acts, applicable_contract_types, statute_references, visibility) VALUES
 
 (
   'Mutual Confidentiality — Standard',
