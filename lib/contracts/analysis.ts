@@ -97,6 +97,7 @@ export async function extractTextFromBuffer(
 // ── Clause extraction (Prompt A) ──────────────────────────────────────────────
 
 export async function extractClauses(contractText: string): Promise<ClauseRaw[]> {
+  console.error(`[extractClauses] ENTRY text_chars=${contractText.length}`)
   const safeText = safeContractText(contractText, 'extractClauses')
 
   const prompt = `Extract the complete clause hierarchy from the following Indian-law contract.
@@ -139,6 +140,7 @@ async function analyseRiskBatch(
   clauses: ClauseRaw[],
   batchIndex: number,
 ): Promise<FlagRaw[]> {
+  console.error(`[analyseRiskBatch] ENTRY clauseCount=${clauses.length} batchIndex=${batchIndex}`)
   const clauseSummary = clauses
     .map((c) => `[${c.clause_number}] ${c.heading}: ${c.text.slice(0, 400)}`)
     .join('\n\n')
@@ -173,7 +175,7 @@ ${clauseSummary}`
   const model = 'claude-sonnet-4-6'
   const label = `analyseRisk-b${batchIndex}`
 
-  console.log(
+  console.error(
     `[${label}] PRE-CALL` +
     ` | model=${model}` +
     ` | clauses_in_batch=${clauses.length}` +
@@ -190,7 +192,7 @@ ${clauseSummary}`
       maxTokens: 4096,
       label,
     })
-    console.log(`[${label}] POST-CALL elapsed=${Date.now() - t0}ms flags_returned=${result.length}`)
+    console.error(`[${label}] POST-CALL elapsed=${Date.now() - t0}ms flags_returned=${result.length}`)
     return result
   } catch (err) {
     console.error(`[${label}] POST-CALL FAILED elapsed=${Date.now() - t0}ms err=${err instanceof Error ? err.message : String(err)}`)
@@ -227,6 +229,7 @@ export async function analyseRisk(contractText: string, clauses: ClauseRaw[]): P
 // ── English summary (Prompt C) ────────────────────────────────────────────────
 
 export async function generateEnglishSummary(contractText: string): Promise<SummaryRaw> {
+  console.error(`[generateEnglishSummary] ENTRY text_chars=${contractText.length}`)
   const prompt = `Summarise the following Indian-law contract.
 
 Return ONLY a JSON object. No other text.
@@ -314,8 +317,9 @@ function findCharPositions(
 // ── Main orchestrator ─────────────────────────────────────────────────────────
 
 export async function runAnalysisPipeline(contractId: string): Promise<void> {
+  console.error(`[pipeline] ENTRY contractId=${contractId}`)
   const admin = createAdminClient()
-  console.log(`[pipeline] START contractId=${contractId} at ${new Date().toISOString()}`)
+  console.error(`[pipeline] START contractId=${contractId} at ${new Date().toISOString()}`)
 
   try {
     await _runPipeline(admin, contractId)
