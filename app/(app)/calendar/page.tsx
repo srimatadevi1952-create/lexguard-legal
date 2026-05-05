@@ -9,14 +9,15 @@ export const metadata: Metadata = { title: 'Legal Calendar — LexGuard Legal' }
 export default async function CalendarPage() {
   const supabase = createClient()
 
+  const { data: { user } } = await supabase.auth.getUser()
+  console.log('[calendar/page] auth user:', user?.id ?? 'NONE')
+
   const { data: eventsRaw, error: eventsErr } = await supabase
     .from('calendar_events')
     .select('*')
     .order('due_date')
 
-  if (eventsErr) {
-    console.error('[calendar/page] events query error:', eventsErr)
-  }
+  console.log('[calendar/page] query result — count:', eventsRaw?.length ?? 0, 'error:', eventsErr ?? null)
 
   const events = (eventsRaw ?? []) as CalendarEvent[]
 

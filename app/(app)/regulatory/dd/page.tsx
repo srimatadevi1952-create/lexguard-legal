@@ -34,11 +34,15 @@ function daysUntil(iso: string): number {
 export default async function DDPage() {
   const supabase = createClient()
 
+  const { data: { user } } = await supabase.auth.getUser()
+  console.log('[dd/page] auth user:', user?.id ?? 'NONE')
+
   const { data: matters, error } = await supabase
     .from('dd_matters')
     .select('*')
     .order('created_at', { ascending: false })
 
+  console.log('[dd/page] query result — count:', matters?.length ?? 0, 'error:', error ?? null)
   if (error) console.error('[dd/page] query error:', error)
 
   const rows = (matters ?? []) as DDMatter[]

@@ -56,11 +56,15 @@ function DaysBadge({ days, status }: { days: number; status: string }) {
 export default async function NoticesPage() {
   const supabase = createClient()
 
+  const { data: { user } } = await supabase.auth.getUser()
+  console.log('[notices/page] auth user:', user?.id ?? 'NONE')
+
   const { data: notices, error } = await supabase
     .from('regulator_notices')
     .select('id, issuer, issuer_office, notice_ref, notice_type, received_date, deadline_date, status, created_at')
     .order('deadline_date', { ascending: true })
 
+  console.log('[notices/page] query result — count:', notices?.length ?? 0, 'error:', error ?? null)
   if (error) console.error('[notices/page] query error:', error)
 
   const rows = (notices ?? []) as RegulatorNotice[]
