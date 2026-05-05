@@ -5,8 +5,7 @@
  *       Claude risk analysis → Claude EN summary → Claude HI summary →
  *       persist all results → update contract record
  *
- * Model choice: claude-opus-4-6 for clause/risk analysis,
- *               claude-sonnet-4-6 for summary + Hindi translation.
+ * Model choice: claude-sonnet-4-6 for all pipeline steps (v1).
  */
 
 import { callClaudeWithJsonRetry, safeContractText } from '@/lib/claude'
@@ -119,7 +118,7 @@ CONTRACT TEXT:
 ${safeText}`
 
   return callClaudeWithJsonRetry<ClauseRaw[]>({
-    model: 'claude-opus-4-6',
+    model: 'claude-sonnet-4-6',
     system: 'You are an expert Indian contract lawyer. Output ONLY valid JSON arrays.',
     prompt,
     maxTokens: 8192,
@@ -172,7 +171,7 @@ CLAUSE BATCH ${batchIndex + 1} TO ANALYSE:
 ${clauseSummary}`
 
   return callClaudeWithJsonRetry<FlagRaw[]>({
-    model: 'claude-opus-4-6',
+    model: 'claude-sonnet-4-6',
     system: 'You are an expert Indian contract lawyer specialising in contract risk analysis. Output ONLY valid JSON arrays.',
     prompt,
     maxTokens: 4096,
