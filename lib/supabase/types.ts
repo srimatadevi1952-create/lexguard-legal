@@ -821,6 +821,145 @@ export interface Database {
           updated_at?: string
         }
       }
+
+      // ---- M&A / CCI -------------------------------------------------------
+
+      cci_assessments: {
+        Row: {
+          id: string
+          org_id: string
+          assessed_by: string | null
+          acquirer_name: string
+          acquirer_assets_india: number | null
+          acquirer_assets_worldwide: number | null
+          acquirer_turnover_india: number | null
+          acquirer_turnover_worldwide: number | null
+          target_name: string
+          target_assets_india: number | null
+          target_assets_worldwide: number | null
+          target_turnover_india: number | null
+          target_turnover_worldwide: number | null
+          target_india_turnover_pct: number | null
+          group_assets_india: number | null
+          group_assets_worldwide: number | null
+          group_turnover_india: number | null
+          group_turnover_worldwide: number | null
+          deal_value: number | null
+          transaction_type: string | null
+          verdict: 'filing_required' | 'exempt' | 'borderline'
+          form_type: string | null
+          triggered_tests: string[]
+          exempt_reasons: string[]
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          assessed_by?: string | null
+          acquirer_name: string
+          acquirer_assets_india?: number | null
+          acquirer_assets_worldwide?: number | null
+          acquirer_turnover_india?: number | null
+          acquirer_turnover_worldwide?: number | null
+          target_name: string
+          target_assets_india?: number | null
+          target_assets_worldwide?: number | null
+          target_turnover_india?: number | null
+          target_turnover_worldwide?: number | null
+          target_india_turnover_pct?: number | null
+          group_assets_india?: number | null
+          group_assets_worldwide?: number | null
+          group_turnover_india?: number | null
+          group_turnover_worldwide?: number | null
+          deal_value?: number | null
+          transaction_type?: string | null
+          verdict: 'filing_required' | 'exempt' | 'borderline'
+          form_type?: string | null
+          triggered_tests?: string[]
+          exempt_reasons?: string[]
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          notes?: string | null
+        }
+      }
+
+      // ---- Clause Library --------------------------------------------------
+
+      clauses: {
+        Row: {
+          id: string
+          org_id: string | null
+          title: string
+          category: string
+          clause_text_en: string
+          clause_text_hi: string | null
+          use_case: string | null
+          risk_notes: string | null
+          party_position: 'drafter_favours' | 'counterparty_favours' | 'neutral'
+          applicable_acts: string[]
+          applicable_contract_types: string[]
+          references: string | null
+          visibility: 'global' | 'org_private'
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id?: string | null
+          title: string
+          category: string
+          clause_text_en: string
+          clause_text_hi?: string | null
+          use_case?: string | null
+          risk_notes?: string | null
+          party_position?: 'drafter_favours' | 'counterparty_favours' | 'neutral'
+          applicable_acts?: string[]
+          applicable_contract_types?: string[]
+          references?: string | null
+          visibility?: 'global' | 'org_private'
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          category?: string
+          clause_text_en?: string
+          clause_text_hi?: string | null
+          use_case?: string | null
+          risk_notes?: string | null
+          party_position?: 'drafter_favours' | 'counterparty_favours' | 'neutral'
+          applicable_acts?: string[]
+          applicable_contract_types?: string[]
+          references?: string | null
+          visibility?: 'global' | 'org_private'
+          updated_at?: string
+        }
+      }
+
+      clause_insertions: {
+        Row: {
+          id: string
+          org_id: string
+          clause_id: string
+          inserted_by: string | null
+          contract_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          clause_id: string
+          inserted_by?: string | null
+          contract_id?: string | null
+          created_at?: string
+        }
+        Update: never
+      }
     }
 
     Enums: {
@@ -918,3 +1057,12 @@ export type DpdpBreachInsert   = Database['public']['Tables']['dpdp_breaches']['
 export type DpdpNotice         = Database['public']['Tables']['dpdp_notices']['Row']
 export type DpdpConsent        = Database['public']['Tables']['dpdp_consents']['Row']
 export type GstFinding         = Database['public']['Tables']['gst_findings']['Row']
+
+// M&A / CCI types
+export type CciAssessment      = Database['public']['Tables']['cci_assessments']['Row']
+export type CciAssessmentInsert = Database['public']['Tables']['cci_assessments']['Insert']
+
+// Clause Library types
+export type ClauseRow          = Database['public']['Tables']['clauses']['Row']
+export type ClauseInsertRow    = Database['public']['Tables']['clauses']['Insert']
+export type ClauseInsertion    = Database['public']['Tables']['clause_insertions']['Row']

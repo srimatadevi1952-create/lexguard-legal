@@ -32,7 +32,7 @@ const NAV_ITEMS = [
   { label: 'M&A & Regulatory', href: '/ma-regulatory', icon: Briefcase },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays },
   { label: 'Execution', href: '/execution', icon: Zap },
-  { label: 'Clause Library', href: '/clause-library', icon: BookOpen },
+  { label: 'Clause Library', href: '/library', icon: BookOpen },
   { label: 'Settings', href: '/settings', icon: Settings },
 ]
 

@@ -252,6 +252,94 @@ Ticket format:    DPR-YYYY-NNNN (DB trigger: generate_dpr_ticket())
 
 ---
 
+## GST Clause Checker (Phase 2 extension)
+
+### Deterministic checker pattern (`lib/contracts/gst-checker.ts`)
+```typescript
+import { checkGstClauses } from '@/lib/contracts/gst-checker'
+const findings = checkGstClauses(contractText) // returns GstCheckResult[]
+```
+Eight regex/keyword checks (no AI):
+1. GSTIN format (`/\b[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b/`)
+2. "Place of supply" keyword → `place_of_supply_ambiguous`
+3. RCM / reverse charge keyword → `reverse_charge_missing`
+4. GST rate (5/12/18/28%) alongside tax type → `incorrect_rate`
+5. GST TDS (Section 51) for government contracts → `missing_gst_clause`
+6. E-invoice / IRN keyword → `missing_gst_clause`
+7. "Time of supply" keyword → `missing_gst_clause`
+8. ITC / "input tax credit" keyword → `missing_gst_clause`
+
+### Rescan API
+`POST /api/compliance/gst/rescan` — fetches all analysed contracts, runs checker,
+deletes existing open findings, inserts new ones. Returns `{ scanned, created }`.
+
+### GST page extension
+`components/compliance/gst-rescan-button.tsx` — client button component that calls
+rescan API and triggers `router.refresh()` to reload server component data.
+
+---
+
+## CCI Threshold Checker (Phase 3 partial)
+
+### Migration
+`supabase/migrations/20260505000014_cci_clauses.sql` — `cci_assessments`, `clauses`,
+`clause_insertions` tables + RLS policies.
+
+### Threshold constants (all INR Crores)
+| Test | Threshold | Statute |
+|---|---|---|
+| Combined assets India | ≥ ₹2,500 Cr | Section 5(a)(i) |
+| Combined turnover India | ≥ ₹7,500 Cr | Section 5(a)(ii) |
+| Worldwide assets | ≥ USD 1.25 Bn (~₹10,437 Cr) + India ≥ ₹1,250 Cr | Section 5(b)(i) |
+| Worldwide turnover | ≥ USD 3.75 Bn (~₹31,312 Cr) + India ≥ ₹3,750 Cr | Section 5(b)(ii) |
+| Group assets India | ≥ ₹10,000 Cr | Section 5(c)(i) |
+| Group turnover India | ≥ ₹30,000 Cr | Section 5(c)(ii) |
+| Small target exemption | Assets ≤ ₹450 Cr AND turnover ≤ ₹1,250 Cr | Schedule I |
+| DVT (2024 amendment) | Deal value > ₹2,000 Cr + India turnover > 10% of global | Competition Amendment Act 2023 |
+
+### Pages and API
+| Path | Type | Purpose |
+|---|---|---|
+| `app/(app)/regulatory/cci/page.tsx` | Client | Single-page CCI form with live verdict |
+| `app/(app)/ma-regulatory/page.tsx` | Server | Landing page with CCI tile (updated from stub) |
+| `app/api/regulatory/cci/route.ts` | API | POST: persists CCI assessment to cci_assessments |
+
+Verdict computed client-side with `useMemo` — no API round-trip for calculation.
+History loaded via Supabase browser client on mount (`useEffect`).
+
+---
+
+## Clause Library (Phase 1 extension)
+
+### Clause library search pattern
+```tsx
+// Server page fetches all clauses (RLS returns global + org_private for current org)
+const { data: clauses } = await supabase.from('clauses').select('*').order('category').order('title')
+// Passed to client component for in-memory filtering
+```
+Filtering is client-side (no re-fetch on filter change): search matches title + clause_text_en,
+sidebar filters by category, party_position, language (HI availability), applicable_acts (checkbox),
+applicable_contract_types (checkbox).
+
+### Pages and API
+| Path | Type | Purpose |
+|---|---|---|
+| `app/(app)/library/page.tsx` | Server | Fetches clauses + role check, renders ClauseLibraryClient |
+| `components/library/clause-library-client.tsx` | Client | Search, filter, clause cards with EN/हिं toggle |
+| `app/api/library/clauses/route.ts` | API | POST: create org_private clause (admin/senior_lawyer only) |
+
+### Nav update
+`components/layout/app-shell.tsx` — Clause Library nav item href changed from
+`/clause-library` to `/library`.
+
+### Seed
+`supabase/seed_cci_clauses.sql`:
+- 5 demo CCI assessments (3 filing_required, 1 exempt, 1 borderline) for democorp
+- 50 global clauses across 10 categories (bilingual EN + HI)
+- 2 org_private clauses for democorp
+
+---
+
 ## API Routes
 
 <!-- app/api/* route handlers, request/response shapes added here -->

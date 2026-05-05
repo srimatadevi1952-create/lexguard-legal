@@ -4,6 +4,7 @@ import { Receipt, ChevronLeft, ExternalLink, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { GstFinding } from '@/lib/supabase/types'
 import type { SlimFlag } from '@/components/compliance/regime-page'
+import { GstRescanButton } from '@/components/compliance/gst-rescan-button'
 
 // GstFinding with joined contract
 type GstFindingRow = GstFinding & {
@@ -62,17 +63,20 @@ export default async function GstPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <div className="flex items-center gap-3">
-        <Link href="/compliance" className="text-slate-400 hover:text-slate-600">
-          <ChevronLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
-            <Receipt className="h-6 w-6 text-brand-teal" />
-            GST Compliance
-          </h1>
-          <p className="text-sm text-slate-500">GST issues detected across your contract portfolio</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Link href="/compliance" className="text-slate-400 hover:text-slate-600">
+            <ChevronLeft className="h-5 w-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
+              <Receipt className="h-6 w-6 text-brand-teal" />
+              GST Compliance
+            </h1>
+            <p className="text-sm text-slate-500">GST issues detected across your contract portfolio</p>
+          </div>
         </div>
+        <GstRescanButton />
       </div>
 
       {/* Portfolio Summary */}
