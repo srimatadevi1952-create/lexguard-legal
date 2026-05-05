@@ -1,6 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  // Disable SDK-level automatic retries — we handle retries explicitly in
+  // callClaudeWithJsonRetry. Without this, the SDK retries up to 2x with
+  // exponential backoff, which stacks timeouts and blows Vercel's 60s limit.
+  maxRetries: 0,
+})
 
 export type ClaudeModel = 'claude-opus-4-6' | 'claude-sonnet-4-6'
 
@@ -50,14 +56,14 @@ export async function callClaude(params: {
         ...(params.system ? { system: params.system } : {}),
         messages: [{ role: 'user', content: params.prompt }],
       },
-      // 20s per-call cap — leaves headroom for 3 sequential Claude steps
-      // (extract + risk-parallel + summary) inside Vercel Hobby's 60s limit.
-      { timeout: 20_000 }
+      // 45s per-call cap — Sonnet 4.6 on large prompts can take 30-40s.
+      // With maxRetries:0 on the client, this timeout fires exactly once.
+      { timeout: 45_000 }
     )
   } catch (err) {
     if (err instanceof Anthropic.APIConnectionTimeoutError) {
-      console.error(`[claude:${label}] TIMEOUT after 20s`)
-      throw new Error(`Claude API timeout after 20s [${label}] — reduce contract size or retry`)
+      console.error(`[claude:${label}] TIMEOUT after 45s`)
+      throw new Error(`Claude API timeout after 45s [${label}] — reduce contract size or retry`)
     }
     if (err instanceof Anthropic.APIError) {
       console.error(
