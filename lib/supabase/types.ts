@@ -12,6 +12,34 @@
 // ---------------------------------------------------------------------------
 // Enum types
 // ---------------------------------------------------------------------------
+// Compliance Suite enums
+export type ComplianceItemStatus   = 'open' | 'in_progress' | 'done' | 'waived'
+export type ComplianceItemPriority = 'low' | 'medium' | 'high' | 'critical'
+export type ComplianceItemSource   = 'assessment' | 'manual' | 'contract_flag'
+export type DprRequestType         = 'access' | 'correction' | 'erasure' | 'nomination' | 'grievance' | 'portability'
+export type DprStatus              = 'open' | 'in_progress' | 'closed' | 'rejected'
+export type DpdpBreachType         = 'confidentiality' | 'integrity' | 'availability'
+export type BreachSeverity         = 'low' | 'medium' | 'high' | 'critical'
+export type BreachStatus           = 'discovered' | 'investigating' | 'reported' | 'closed'
+export type DocStatus              = 'draft' | 'published' | 'needs_review' | 'archived'
+export type GstFindingType         = 'missing_gst_clause' | 'incorrect_rate' | 'reverse_charge_missing' | 'place_of_supply_ambiguous' | 'other'
+export type GstFindingSeverity     = 'low' | 'medium' | 'high'
+export type GstFindingStatus       = 'open' | 'resolved'
+
+// DPDP pillar scores JSONB shape
+export interface DpdpPillarScores {
+  notice?:       number
+  consent?:      number
+  rights?:       number
+  security?:     number
+  accountability?: number
+  grievance?:    number
+  breach?:       number
+  processor?:    number
+  retention?:    number
+  cross_border?: number
+}
+
 // Contract Intelligence enums
 export type ContractType = 'nda' | 'msa' | 'sla' | 'employment' | 'vendor' | 'lease' | 'shareholder' | 'loan' | 'jv' | 'other'
 export type ContractExecutionStatus = 'draft' | 'under_review' | 'executed' | 'archived' | 'analysis_failed' | 'analysing'
@@ -495,6 +523,304 @@ export interface Database {
           read_at?: string | null
         }
       }
+
+      // ---- Compliance Suite ------------------------------------------------
+
+      compliance_regimes: {
+        Row: {
+          id: string
+          code: string
+          name: string
+          description: string
+          icon_name: string
+          order_index: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          name: string
+          description: string
+          icon_name: string
+          order_index?: number
+          created_at?: string
+        }
+        Update: {
+          name?: string
+          description?: string
+          icon_name?: string
+          order_index?: number
+        }
+      }
+
+      compliance_postures: {
+        Row: {
+          id: string
+          org_id: string
+          regime_id: string
+          score: number
+          pillar_scores: DpdpPillarScores
+          trend: 'improving' | 'stable' | 'declining'
+          last_assessed_at: string | null
+          assessed_by: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          regime_id: string
+          score?: number
+          pillar_scores?: DpdpPillarScores
+          trend?: 'improving' | 'stable' | 'declining'
+          last_assessed_at?: string | null
+          assessed_by?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          score?: number
+          pillar_scores?: DpdpPillarScores
+          trend?: 'improving' | 'stable' | 'declining'
+          last_assessed_at?: string | null
+          assessed_by?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+
+      compliance_items: {
+        Row: {
+          id: string
+          org_id: string
+          regime_id: string
+          title: string
+          description: string | null
+          status: ComplianceItemStatus
+          priority: ComplianceItemPriority
+          due_date: string | null
+          assigned_to: string | null
+          source: ComplianceItemSource
+          source_question: string | null
+          source_contract_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          regime_id: string
+          title: string
+          description?: string | null
+          status?: ComplianceItemStatus
+          priority?: ComplianceItemPriority
+          due_date?: string | null
+          assigned_to?: string | null
+          source?: ComplianceItemSource
+          source_question?: string | null
+          source_contract_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          description?: string | null
+          status?: ComplianceItemStatus
+          priority?: ComplianceItemPriority
+          due_date?: string | null
+          assigned_to?: string | null
+          updated_at?: string
+        }
+      }
+
+      dpr_requests: {
+        Row: {
+          id: string
+          org_id: string
+          ticket_number: string
+          principal_name: string
+          principal_email: string
+          request_type: DprRequestType
+          description: string
+          status: DprStatus
+          assigned_to: string | null
+          sla_deadline: string
+          response_text: string | null
+          responded_at: string | null
+          responded_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          ticket_number?: string   // auto-generated by trigger
+          principal_name: string
+          principal_email: string
+          request_type: DprRequestType
+          description: string
+          status?: DprStatus
+          assigned_to?: string | null
+          sla_deadline: string
+          response_text?: string | null
+          responded_at?: string | null
+          responded_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: DprStatus
+          assigned_to?: string | null
+          response_text?: string | null
+          responded_at?: string | null
+          responded_by?: string | null
+          updated_at?: string
+        }
+      }
+
+      dpdp_breaches: {
+        Row: {
+          id: string
+          org_id: string
+          title: string
+          description: string
+          breach_type: DpdpBreachType
+          severity: BreachSeverity
+          discovered_at: string
+          reported_to_dpb_at: string | null
+          dpb_acknowledgement_ref: string | null
+          affected_principals_estimate: number | null
+          data_categories: string[]
+          status: BreachStatus
+          notification_draft: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          title: string
+          description: string
+          breach_type: DpdpBreachType
+          severity?: BreachSeverity
+          discovered_at: string
+          reported_to_dpb_at?: string | null
+          dpb_acknowledgement_ref?: string | null
+          affected_principals_estimate?: number | null
+          data_categories?: string[]
+          status?: BreachStatus
+          notification_draft?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          description?: string
+          severity?: BreachSeverity
+          reported_to_dpb_at?: string | null
+          dpb_acknowledgement_ref?: string | null
+          affected_principals_estimate?: number | null
+          data_categories?: string[]
+          status?: BreachStatus
+          notification_draft?: string | null
+          updated_at?: string
+        }
+      }
+
+      dpdp_notices: {
+        Row: {
+          id: string
+          org_id: string
+          title: string
+          content: string
+          version: string
+          status: DocStatus
+          published_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          title: string
+          content?: string
+          version?: string
+          status?: DocStatus
+          published_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title?: string
+          content?: string
+          version?: string
+          status?: DocStatus
+          published_at?: string | null
+          updated_at?: string
+        }
+      }
+
+      dpdp_consents: {
+        Row: {
+          id: string
+          org_id: string
+          principal_identifier: string
+          purpose: string
+          granted_at: string
+          withdrawn_at: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          principal_identifier: string
+          purpose: string
+          granted_at?: string
+          withdrawn_at?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          withdrawn_at?: string | null
+          is_active?: boolean
+        }
+      }
+
+      gst_findings: {
+        Row: {
+          id: string
+          org_id: string
+          contract_id: string | null
+          finding_type: GstFindingType
+          description: string
+          severity: GstFindingSeverity
+          status: GstFindingStatus
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          contract_id?: string | null
+          finding_type: GstFindingType
+          description: string
+          severity?: GstFindingSeverity
+          status?: GstFindingStatus
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string
+          severity?: GstFindingSeverity
+          status?: GstFindingStatus
+          updated_at?: string
+        }
+      }
     }
 
     Enums: {
@@ -575,3 +901,20 @@ export type ContractSummary     = Database['public']['Tables']['contract_summari
 export type ContractSummaryInsert = Database['public']['Tables']['contract_summaries']['Insert']
 export type ContractChatMessage = Database['public']['Tables']['contract_chat_messages']['Row']
 export type ContractTag         = Database['public']['Tables']['contract_tags']['Row']
+
+// Compliance Suite types
+export type ComplianceRegime   = Database['public']['Tables']['compliance_regimes']['Row']
+export type CompliancePosture  = Database['public']['Tables']['compliance_postures']['Row']
+export type CompliancePostureInsert = Database['public']['Tables']['compliance_postures']['Insert']
+export type CompliancePostureUpdate = Database['public']['Tables']['compliance_postures']['Update']
+export type ComplianceItem     = Database['public']['Tables']['compliance_items']['Row']
+export type ComplianceItemInsert = Database['public']['Tables']['compliance_items']['Insert']
+export type ComplianceItemUpdate = Database['public']['Tables']['compliance_items']['Update']
+export type DprRequest         = Database['public']['Tables']['dpr_requests']['Row']
+export type DprRequestInsert   = Database['public']['Tables']['dpr_requests']['Insert']
+export type DprRequestUpdate   = Database['public']['Tables']['dpr_requests']['Update']
+export type DpdpBreach         = Database['public']['Tables']['dpdp_breaches']['Row']
+export type DpdpBreachInsert   = Database['public']['Tables']['dpdp_breaches']['Insert']
+export type DpdpNotice         = Database['public']['Tables']['dpdp_notices']['Row']
+export type DpdpConsent        = Database['public']['Tables']['dpdp_consents']['Row']
+export type GstFinding         = Database['public']['Tables']['gst_findings']['Row']
