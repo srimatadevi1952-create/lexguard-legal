@@ -58,7 +58,7 @@ function daysUntil(dateStr: string): { label: string; cls: string } {
   return { label: `${diff}d left`, cls: 'text-slate-500' }
 }
 
-export function RegimePage({ regimeCode, regimeName, icon: Icon, posture, items, contractFlags }: Props) {
+export function RegimePage({ regimeCode: _regimeCode, regimeName, icon: Icon, posture, items, contractFlags }: Props) {
   const openItems = items.filter((i) => i.status === 'open' || i.status === 'in_progress')
   const doneItems = items.filter((i) => i.status === 'done' || i.status === 'waived')
 

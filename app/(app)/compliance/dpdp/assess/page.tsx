@@ -153,7 +153,7 @@ export default function DpdpAssessPage() {
   const currentAnswers = answers[step] ?? []
   const progress = Math.round(((step) / PILLARS.length) * 100)
 
-  const allAnswered = answers[step]?.every((a) => a !== null) ?? false
+  const _allAnswered = answers[step]?.every((a) => a !== null) ?? false
   const totalAnswered = answers.flat().filter((a) => a !== null).length
   const totalQuestions = PILLARS.reduce((s, p) => s + p.questions.length, 0)
 

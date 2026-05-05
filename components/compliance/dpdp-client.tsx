@@ -119,7 +119,7 @@ interface Props {
 // Component
 // ---------------------------------------------------------------------------
 export function DpdpClient({
-  posture, items, dprRequests, breaches, notices, contractFlags, regimeId,
+  posture, items, dprRequests, breaches, notices, contractFlags, regimeId: _regimeId,
 }: Props) {
   const [dprTab, setDprTab]                 = useState<'open' | 'in_progress' | 'closed'>('open')
   const [showDprModal, setShowDprModal]     = useState(false)
@@ -133,7 +133,7 @@ export function DpdpClient({
   const [responding, setResponding]         = useState(false)
   const [copied, setCopied]                 = useState(false)
   const [localDprs, setLocalDprs]           = useState<DprRequest[]>(dprRequests)
-  const [localBreaches, setLocalBreaches]   = useState<DpdpBreach[]>(breaches)
+  const [localBreaches, _setLocalBreaches]  = useState<DpdpBreach[]>(breaches)
 
   // New DPR form state
   const [dprForm, setDprForm] = useState({

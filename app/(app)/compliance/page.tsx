@@ -80,7 +80,7 @@ export default async function CompliancePage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Compliance Suite</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Track your organisation's regulatory posture across all key Indian compliance regimes.
+          Track your organisation&apos;s regulatory posture across all key Indian compliance regimes.
         </p>
       </div>
 
